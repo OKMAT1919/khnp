@@ -15,5 +15,5 @@ services:
         value: "*"
 databases:
   - name: khnp-edu-db
-    plan: starter
+    plan: basic-256mb
     postgresMajorVersion: "16"
