@@ -1,0 +1,19 @@
+# Render.com 배포 청사진 — 관리형 PostgreSQL + 웹 서비스 자동 생성
+services:
+  - type: web
+    name: khnp-edu-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: khnp-edu-db, property: connectionString }
+      - key: PGSSL
+        value: "true"
+      - key: CORS_ORIGIN
+        value: "*"
+databases:
+  - name: khnp-edu-db
+    plan: starter
+    postgresMajorVersion: "16"

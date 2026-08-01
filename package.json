@@ -1,0 +1,19 @@
+{
+  "name": "khnp-edu-backend",
+  "version": "1.0.0",
+  "description": "한수원 교육과정 등록·신청 플랫폼 백엔드 API (Express + PostgreSQL)",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "psql \"$DATABASE_URL\" -f db/schema.sql",
+    "seed": "psql \"$DATABASE_URL\" -f db/seed.sql"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  },
+  "engines": { "node": ">=18" }
+}
