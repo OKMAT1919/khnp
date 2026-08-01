@@ -24,6 +24,7 @@ app.use('/api/competencies',   require('./routes/competencies'));
 app.use('/api/institutions',   require('./routes/institutions'));
 app.use('/api/demands',        require('./routes/demands'));
 app.use('/api/depts',          require('./routes/depts'));
+app.use('/api/sync',           require('./routes/sync'));
 
 app.use((err, _req, res, _next) => {
   console.error(err);
