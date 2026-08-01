@@ -5,7 +5,8 @@ const db = require('./db');
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
-app.use(cors({ origin: (process.env.CORS_ORIGIN || '*').split(',').map(s => s.trim()) }));
+const corsOrigin = (process.env.CORS_ORIGIN || '*').trim();
+app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(s => s.trim()) }));
 
 // 간단 요청 로깅
 app.use((req, _res, next) => { console.log(`${req.method} ${req.url}`); next(); });
