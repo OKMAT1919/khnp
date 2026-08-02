@@ -1696,6 +1696,7 @@ async function bulkImport(ev){
       const remark = pick(r,['비고']);
       const inst = pick(r,['교육기관']);
       const lvVal = normLv(pick(r,['수준','역량레벨']));
+      const yrVal = parseInt(pick(r,['운영연도','연도']))||CUR_YEAR;
       const mapArr = (jbArr.length?jbArr:['']).map(jb=>[jgArr[0]||'', srArr[0]||'', jb, lvVal, cpArr]);
       const c = {
         id:'NEW_'+stamp+'_'+idx, n,
@@ -1713,6 +1714,7 @@ async function bulkImport(ev){
         kb1: pick(r,['교육체계대분류','대분류'])||'직무역량',
         kb2: pick(r,['교육체계중분류','중분류'])||'직무전문',
         kb3: pick(r,['교육체계소분류','소분류']),
+        yr: yrVal, grp: pick(r,['대표코드'])||'',
         lv: lvVal,
         cp: cpArr, map: mapArr,
         jg: jgArr, sr: srArr, jb: jbArr,
