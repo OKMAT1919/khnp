@@ -121,6 +121,22 @@ aside{position:sticky;top:118px;max-height:calc(100vh - 132px);overflow-y:auto;d
 .cpbar{flex:1;height:100%;display:flex;align-items:flex-end;background:#F1F4F8;border-radius:3px;overflow:hidden}
 .cpbar i{display:block;width:100%;border-radius:3px 3px 0 0;min-height:2px}
 .cpcard-f{font-size:10px;color:var(--mute)}
+.instsel{position:relative}
+.instsel input[type=text],.instsel #fm_i_search{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;outline:none;font-size:13px}
+.instsel #fm_i_search:focus{border-color:var(--khnp)}
+.instsel-drop{position:absolute;top:100%;left:0;right:0;z-index:40;background:#fff;border:1px solid var(--line);border-radius:8px;margin-top:3px;max-height:240px;overflow-y:auto;box-shadow:0 8px 24px rgba(11,37,69,.12)}
+.instopt{padding:8px 11px;cursor:pointer;border-bottom:1px solid #F0F3F8;display:flex;flex-direction:column;gap:1px}
+.instopt:last-child{border-bottom:none}
+.instopt:hover{background:var(--khnp-soft)}
+.instopt b{font-size:12.5px;color:var(--ink);font-weight:600}
+.instopt small{font-size:10.5px;color:var(--mute)}
+.instopt.instnew{color:var(--khnp-deep);background:#F5F9FF}
+.instopt.instnew:hover{background:var(--khnp-soft)}
+.instsel-chosen .instchip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--khnp);background:var(--khnp-soft);border-radius:8px;padding:7px 11px;width:100%;box-sizing:border-box}
+.instchip b{font-size:13px;color:var(--khnp-deep);font-weight:600}
+.instchip small{font-size:11px;color:var(--mute);margin-left:auto;margin-right:6px}
+.instchip .x{cursor:pointer;color:var(--mute);font-weight:700}
+.instchip .x:hover{color:var(--red)}
 .afilters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}
 .afilters .sbtn{font-size:12px}
 .afilters .afq{width:200px}
@@ -602,9 +618,14 @@ tr:hover td{background:#FAFBFD}
       <div class="fg full"><label>교육체계 소분류</label><select id="fm_kb3"></select></div>
       <div class="fg"><label>주관부서</label><input id="fm_o1" placeholder="예: 인재개발원"></div>
       <div class="fg"><label>주관부서(세부)</label><input id="fm_o2" placeholder="예: 원자력교육부"></div>
-      <div class="fg"><label>교육기관</label>
-        <input id="fm_i" list="instList" placeholder="목록에서 선택하거나 직접 입력" oninput="fmInstAutofill()">
-        <datalist id="instList"></datalist>
+      <div class="fg"><label>교육기관 <span style="font-size:10px;color:var(--mute);font-weight:500">— 목록에서 선택 (임의 입력 방지)</span></label>
+        <div class="instsel" id="instSelWrap">
+          <input id="fm_i_search" placeholder="교육기관명 검색…" autocomplete="off"
+                 oninput="fmInstFilter()" onfocus="fmInstFilter()" onkeydown="fmInstKey(event)">
+          <input type="hidden" id="fm_i">
+          <div class="instsel-drop" id="instDrop" style="display:none"></div>
+          <div class="instsel-chosen" id="instChosen" style="display:none"></div>
+        </div>
       </div>
       <div class="fg"><label>교육장소</label><input id="fm_p" placeholder="예: 인재개발원(본원)"></div>
       <div class="fg"><label>교육기간(일)</label><input id="fm_d" type="number" min="0" placeholder="일수"></div>
@@ -1108,7 +1129,7 @@ function openForm(id){
   document.getElementById('fm_m').value = c?(c.m||''):'';
   document.getElementById('fm_o1').value = c?c.o1:'';
   document.getElementById('fm_o2').value = c?(c.o2||''):'';
-  document.getElementById('fm_i').value = c?(c.i||''):'';
+  fmSetInst(c?(c.i||''):'');
   document.getElementById('fm_p').value = c?(c.p||''):'';
   document.getElementById('fm_d').value = c?(c.d||''):'';
   document.getElementById('fm_h').value = c?(c.h||''):'';
@@ -1211,9 +1232,50 @@ function fmFillKB3(pre){
   el.innerHTML='<option value="">선택 안 함</option>'+ss.map(s=>`<option>${esc(s)}</option>`).join('');
   if(pre&&ss.includes(pre)) el.value=pre;
 }
-function fmFillInstList(){
-  document.getElementById('instList').innerHTML = INSTS.map(x=>`<option value="${esc(x.name)}">${x.addr?esc(x.addr):''}</option>`).join('');
+function fmFillInstList(){ /* datalist 제거됨 — 검색형 셀렉트 사용 */ }
+function fmSetInst(name){
+  document.getElementById('fm_i').value = name||'';
+  const chosen=document.getElementById('instChosen'), search=document.getElementById('fm_i_search'), drop=document.getElementById('instDrop');
+  if(name){
+    const inst=INSTS.find(x=>x.name===name);
+    chosen.innerHTML=`<span class="instchip"><b>${esc(name)}</b>${inst&&inst.addr?`<small>${esc(inst.addr)}</small>`:''}<span class="x" onclick="fmClearInst()">✕</span></span>`;
+    chosen.style.display='block'; search.style.display='none'; drop.style.display='none';
+  } else { chosen.style.display='none'; search.style.display='block'; search.value=''; }
 }
+function fmClearInst(){ fmSetInst(''); setTimeout(()=>document.getElementById('fm_i_search').focus(),0); }
+function fmInstFilter(){
+  const q=(document.getElementById('fm_i_search').value||'').trim().toLowerCase();
+  const drop=document.getElementById('instDrop');
+  let list=INSTS.slice();
+  if(q) list=list.filter(x=>x.name.toLowerCase().includes(q));
+  list=list.slice(0,50);
+  let html=list.map(x=>`<div class="instopt" onclick="fmSetInst('${esc(x.name).replace(/'/g,"\\'")}')"><b>${esc(x.name)}</b>${x.addr?`<small>${esc(x.addr)}</small>`:''}</div>`).join('');
+  // 정확히 일치하는 기관이 없으면 신규 등록 안내
+  const exact=INSTS.some(x=>x.name.toLowerCase()===q);
+  if(q && !exact){
+    html += `<div class="instopt instnew" onclick="fmRegisterInst()">＋ '<b>${esc(document.getElementById('fm_i_search').value.trim())}</b>' 새 교육기관으로 등록…</div>`;
+  }
+  drop.innerHTML = html || '<div class="instopt" style="color:var(--mute);cursor:default">검색 결과 없음 — 아래에서 새로 등록하세요</div>'
+    + (q?'':'') ;
+  if(!list.length && !q) drop.innerHTML='<div class="instopt" style="color:var(--mute);cursor:default">등록된 교육기관이 없습니다</div>';
+  drop.style.display='block';
+}
+function fmInstKey(ev){
+  if(ev.key==='Enter'){ ev.preventDefault();
+    const q=(ev.target.value||'').trim();
+    const exact=INSTS.find(x=>x.name.toLowerCase()===q.toLowerCase());
+    if(exact) fmSetInst(exact.name);
+    else { const first=document.querySelector('#instDrop .instopt:not(.instnew)'); if(first && INSTS.some(x=>x.name===first.querySelector('b')?.textContent)) first.click(); }
+  } else if(ev.key==='Escape'){ document.getElementById('instDrop').style.display='none'; }
+}
+function fmRegisterInst(){
+  const name=(document.getElementById('fm_i_search').value||'').trim(); if(!name) return;
+  if(!confirm(`'${name}'을(를) 새 교육기관으로 등록할까요?\n중복·유사 명칭이 없는지 확인 후 등록하세요.`)) return;
+  if(!INSTS.some(x=>x.name===name)){ INSTS.unshift({name, biz:'', addr:'', tel:'', home:'', memo:'과정등록 중 추가'}); saveInsts(); }
+  fmSetInst(name);
+}
+// 폼 밖 클릭 시 드롭다운 닫기
+document.addEventListener('click', e=>{ const w=document.getElementById('instSelWrap'); if(w && !w.contains(e.target)){ const d=document.getElementById('instDrop'); if(d) d.style.display='none'; } });
 function fmInstAutofill(){}
 
 /* ---- hashtag 비고 ---- */
