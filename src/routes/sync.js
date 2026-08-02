@@ -22,6 +22,7 @@ router.get('/bootstrap', async (_req, res, next) => {
         d: row.edu_days ?? '', h: row.edu_hours ?? '', m: row.edu_method || '', p: row.edu_place || '',
         lv: row.edu_level ?? '', link: row.course_link || '',
         kb1: row.fw_kb1 || '', kb2: row.fw_kb2 || '', kb3: row.fw_kb3 || '',
+        yr: row.plan_year || 2026, grp: row.course_group || row.course_id,
         nw: row.is_new ? 'O' : 'X', mu: row.is_required ? 'O' : 'X', rec: row.is_recommend ? 'O' : 'X',
         tags: tagsByCourse[row.course_id] || [],
         jg: [...new Set(map.map(x => x[0]).filter(Boolean))],

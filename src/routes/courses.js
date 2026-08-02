@@ -28,6 +28,7 @@ async function assembleCourse(row) {
     d: row.edu_days ?? '', h: row.edu_hours ?? '', m: row.edu_method || '', p: row.edu_place || '',
     lv: row.edu_level ?? '', link: row.course_link || '',
     kb1: row.fw_kb1 || '', kb2: row.fw_kb2 || '', kb3: row.fw_kb3 || '',
+    yr: row.plan_year || 2026, grp: row.course_group || row.course_id,
     nw: row.is_new ? 'O' : 'X', mu: row.is_required ? 'O' : 'X', rec: row.is_recommend ? 'O' : 'X',
     tags, jg, sr, jb, cp, map,
   };
@@ -82,12 +83,13 @@ async function upsertCourse(body, isNew) {
       body.g || '', body.ct || '', body.d || null, body.h || null, body.m || '', body.p || '',
       body.lv === '' ? null : body.lv, body.link || '', body.kb1 || '', body.kb2 || '', body.kb3 || '',
       body.nw === 'O', body.mu === 'O', body.rec === 'O', body.published !== false,
+      body.yr || 2026, body.grp || id,
     ];
     await client.query(`
       INSERT INTO tb_course(course_id,course_nm,edu_type,institution_id,inst_nm,host_dept,host_dept_sub,
         edu_goal,edu_content,edu_days,edu_hours,edu_method,edu_place,edu_level,course_link,fw_kb1,fw_kb2,fw_kb3,
-        is_new,is_required,is_recommend,is_published)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+        is_new,is_required,is_recommend,is_published,plan_year,course_group)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
       ON CONFLICT (course_id) DO UPDATE SET
         course_nm=EXCLUDED.course_nm, edu_type=EXCLUDED.edu_type, institution_id=EXCLUDED.institution_id,
         inst_nm=EXCLUDED.inst_nm, host_dept=EXCLUDED.host_dept, host_dept_sub=EXCLUDED.host_dept_sub,
@@ -95,7 +97,8 @@ async function upsertCourse(body, isNew) {
         edu_hours=EXCLUDED.edu_hours, edu_method=EXCLUDED.edu_method, edu_place=EXCLUDED.edu_place,
         edu_level=EXCLUDED.edu_level, course_link=EXCLUDED.course_link, fw_kb1=EXCLUDED.fw_kb1,
         fw_kb2=EXCLUDED.fw_kb2, fw_kb3=EXCLUDED.fw_kb3, is_new=EXCLUDED.is_new, is_required=EXCLUDED.is_required,
-        is_recommend=EXCLUDED.is_recommend, is_published=EXCLUDED.is_published, updated_at=now()
+        is_recommend=EXCLUDED.is_recommend, is_published=EXCLUDED.is_published,
+        plan_year=EXCLUDED.plan_year, course_group=EXCLUDED.course_group, updated_at=now()
     `, vals);
 
     // 태그·매핑 재구성

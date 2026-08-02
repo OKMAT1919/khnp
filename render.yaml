@@ -1,5 +1,6 @@
-# Render.com 배포 청사진 — 관리형 PostgreSQL + 웹 서비스 자동 생성
+# Render.com 배포 청사진 — 백엔드 API + PostgreSQL + 프론트 정적 사이트
 services:
+  # 1) 백엔드 API 서버
   - type: web
     name: khnp-edu-api
     runtime: node
@@ -13,6 +14,14 @@ services:
         value: "true"
       - key: CORS_ORIGIN
         value: "*"
+
+  # 2) 프론트엔드 정적 사이트 (public/index.html 게시)
+  - type: web
+    name: khnp-edu-web
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./public
+
 databases:
   - name: khnp-edu-db
     plan: basic-256mb

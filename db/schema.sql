@@ -110,6 +110,8 @@ CREATE TABLE tb_course (
   fw_kb1        VARCHAR(40)  DEFAULT '',
   fw_kb2        VARCHAR(60)  DEFAULT '',
   fw_kb3        VARCHAR(80)  DEFAULT '',
+  plan_year     SMALLINT NOT NULL DEFAULT 2026,   -- 운영연도
+  course_group  VARCHAR(30)  DEFAULT '',           -- 대표코드(연도간 동일과정 묶음)
   is_new        BOOLEAN NOT NULL DEFAULT FALSE,
   is_required   BOOLEAN NOT NULL DEFAULT FALSE,
   is_recommend  BOOLEAN NOT NULL DEFAULT FALSE,
@@ -121,6 +123,8 @@ CREATE TABLE tb_course (
 CREATE INDEX ix_course_pub  ON tb_course(is_published);
 CREATE INDEX ix_course_type ON tb_course(edu_type);
 CREATE INDEX ix_course_kb1  ON tb_course(fw_kb1);
+CREATE INDEX ix_course_year ON tb_course(plan_year);
+CREATE INDEX ix_course_grp  ON tb_course(course_group);
 CREATE INDEX ix_course_nm   ON tb_course(course_nm);
 
 CREATE TABLE tb_course_tag (
