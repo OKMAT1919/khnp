@@ -521,6 +521,8 @@ tr:hover td{background:#FAFBFD}
         <input id="inQ" class="sbtn" style="width:200px" placeholder="기관명 · 주소 검색..." oninput="renderInst();renderInstGrid()">
         <button class="sbtn amber" onclick="openInstForm()">＋ 교육기관 등록</button>
         <button class="sbtn" onclick="exportInstCSV()">교육기관 CSV</button>
+        <button class="sbtn blue" onclick="document.getElementById('instBulkFile').click()">⬆ Excel 업로드</button>
+        <input type="file" id="instBulkFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="instBulkImport(event)">
         <button class="sbtn blue" id="inGridBtn" onclick="toggleInstGrid()">⊞ 엑셀형 편집</button>
       </span>
     </div>
@@ -2003,6 +2005,45 @@ async function delInst(ri){
 }
 function exportInstCSV(){
   dlCSV(INSTS.map(x=>({교육기관명:x.name, 사업자등록번호:x.biz, 주소:x.addr, 연락처:x.tel, 홈페이지:x.home, 비고:x.memo})), '한수원_교육기관.csv');
+}
+async function instBulkImport(ev){
+  const f=ev.target.files[0]; if(!f) return; ev.target.value='';
+  try{
+    const buf=await f.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const sName=wb.SheetNames.find(n=>n.includes('교육기관')||n.includes('기관'))||wb.SheetNames[0];
+    const sheet=wb.Sheets[sName];
+    // 헤더 행 자동 탐지: '교육기관명' 또는 '기관명'이 있는 행을 헤더로
+    const aoa=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
+    let hdrRow=0;
+    for(let i=0;i<Math.min(aoa.length,5);i++){ if(aoa[i].some(c=>String(c).includes('교육기관명')||String(c).includes('기관명')||String(c).trim()==='교육기관')){ hdrRow=i; break; } }
+    const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',range:hdrRow});
+    if(!rows.length){ toast('데이터가 없습니다'); return; }
+    const pick=(r,keys)=>{ for(const k of keys){ if(r[k]!=null&&String(r[k]).trim()!=='') return String(r[k]).trim(); } return ''; };
+    let added=0, updated=0, skipped=0;
+    rows.forEach(r=>{
+      const name=pick(r,['교육기관명','기관명','교육기관','name']);
+      if(!name){ skipped++; return; }
+      const rec={
+        name,
+        biz: pick(r,['사업자등록번호','사업자번호','biz']),
+        addr: pick(r,['주소','소재지','addr']),
+        tel: pick(r,['연락처','전화','전화번호','tel']),
+        home: pick(r,['홈페이지','홈페이지주소','URL','home']),
+        memo: pick(r,['비고','메모','memo']),
+      };
+      const ex=INSTS.find(x=>x.name===name);
+      if(ex){ // 기존 기관: 값이 있는 항목만 갱신(빈값으로 덮어쓰지 않음)
+        let ch=false;
+        ['biz','addr','tel','home','memo'].forEach(k=>{ if(rec[k] && rec[k]!==ex[k]){ ex[k]=rec[k]; ch=true; } });
+        if(ch) updated++;
+      } else { INSTS.unshift(rec); added++; }
+    });
+    await saveInsts();
+    log('교육기관 Excel 업로드', `추가 ${added} · 갱신 ${updated}`);
+    renderInst(); if(instGridOn) renderInstGrid();
+    toast(`✓ 교육기관 업로드 완료 — 신규 ${added}개, 갱신 ${updated}개${skipped?`, 무시 ${skipped}행(기관명 없음)`:''}`);
+  }catch(e){ console.error(e); toast('업로드 실패: 엑셀 형식을 확인하세요'); }
 }
 
 /* ============ BULK IMPORT (Excel) ============ */
