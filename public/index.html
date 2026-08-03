@@ -515,6 +515,20 @@ tr:hover td{background:#FAFBFD}
     </div>
     <div class="note">한수원 교육체계 = <b>공통역량 · 리더십역량 · 직무역량</b>. 모든 교육과정은 이 체계의 <b>대분류 → 중분류 → 소분류</b> 중 하나의 영역에 속합니다. 여기서 등록·삭제한 분류는 <b>과정 스토어의 교육체계 열</b>과 <b>데이터관리(과정 등록)의 교육체계 선택</b>에 즉시 연동됩니다. 항목 옆 숫자는 그 분류에 속한 게시중 과정 수입니다.</div>
   </div>
+  <div class="panel" style="margin-top:14px">
+    <div class="p-h"><b>교육분류 · 교육방법 관리</b> <span style="font-size:12px;color:var(--mute)">과정 등록·필터의 드롭다운에 연동</span></div>
+    <div class="taxgrid" style="grid-template-columns:1fr 1fr">
+      <div class="taxcol">
+        <div class="taxcol-h">교육분류 <button class="sbtn amber" style="padding:3px 10px;font-size:11px" onclick="addEduType()">＋ 추가</button></div>
+        <div class="taxlist" id="etList"></div>
+      </div>
+      <div class="taxcol">
+        <div class="taxcol-h">교육방법 <button class="sbtn amber" style="padding:3px 10px;font-size:11px" onclick="addEduMethod()">＋ 추가</button></div>
+        <div class="taxlist" id="emList"></div>
+      </div>
+    </div>
+    <div class="note">항목 옆 숫자는 그 분류·방법을 쓰는 과정 수입니다. <b>이름을 수정하면</b> 연계된 과정에 일괄 반영되고, <b>삭제하면</b> 해당 과정의 값이 빈칸이 되어 다시 지정할 수 있습니다. 변경은 과정 등록·과정 스토어의 드롭다운에 즉시 연동됩니다.</div>
+  </div>
 </div>
 
 <!-- ================= INSTITUTIONS ================= -->
@@ -664,8 +678,8 @@ tr:hover td{background:#FAFBFD}
     <div class="m-name" id="fmTitle" style="padding-top:22px">신규 과정 등록</div>
     <div class="form-grid">
       <div class="fg full"><label>과정명 <span class="req">*</span></label><input id="fm_n" placeholder="예: 1차계통 수질관리"></div>
-      <div class="fg"><label>교육분류 <span class="req">*</span></label><select id="fm_cl"><option>사내교육</option><option>국내위탁</option><option>해외위탁</option><option>온라인</option></select></div>
-      <div class="fg"><label>교육방법</label><select id="fm_m"><option value="">선택</option><option>오프라인비합숙</option><option>오프라인합숙</option><option>온라인</option><option>혼합</option></select></div>
+      <div class="fg"><label>교육분류 <span class="req">*</span></label><select id="fm_cl"></select></div>
+      <div class="fg"><label>교육방법</label><select id="fm_m"></select></div>
       <div class="fg"><label>교육체계 대분류 <span class="req">*</span></label><select id="fm_kb1" onchange="fmFillKB2()"></select></div>
       <div class="fg"><label>교육체계 중분류 <span class="req">*</span></label><select id="fm_kb2" onchange="fmFillKB3()"></select></div>
       <div class="fg full"><label>교육체계 소분류</label><select id="fm_kb3"></select></div>
@@ -764,6 +778,8 @@ const KTREE_BASE = {"공통역량":{"전사필수(법정)":["전사필수"],"핵
 let KTREE = JSON.parse(JSON.stringify(KTREE_BASE));
 let YEARS = [2023,2024,2025,2026,2027];   // 관리 연도 (화면에서 추가 가능)
 let CUR_YEAR = 2026;                        // 스토어·신청 기준 연도
+let EDU_TYPES = ['사내교육','국내위탁','해외위탁','온라인'];   // 교육분류 마스터
+let EDU_METHODS = ['오프라인비합숙','오프라인합숙','온라인','혼합','해외위탁교육','실시간 원격교육'];  // 교육방법 마스터
 
 /* ============ STATE / STORAGE (API 연동) ============ */
 const API_BASE = 'https://khnp-edu-api.onrender.com';   // ← 서버 주소 (변경 시 이 한 줄만 수정)
@@ -934,33 +950,33 @@ function renderFilters(){
   const yrCnt = count(all, c=>String(c.yr||2026));
   const yrEl = document.getElementById('selYR');
   if(yrEl) yrEl.innerHTML = YEARS.slice().sort((a,b)=>b-a).map(y=>`<option value="${y}" ${CUR_YEAR===y?'selected':''}>${y}년 (${yrCnt[String(y)]||0})</option>`).join('');
-  // ① 직계: TAX 기준(+과정에만 존재하는 항목 병합)
-  const jgSet = [...new Set([...Object.keys(TAX), ...all.flatMap(c=>c.jg)])].sort((a,b)=>a.localeCompare(b,'ko'));
+  // ① 직계: 직무체계(TAX) 마스터만
+  const jgSet = Object.keys(TAX).sort((a,b)=>a.localeCompare(b,'ko'));
   const jgCnt = count(all,c=>c.jg);
   document.getElementById('selJG').innerHTML = '<option value="">전체 직계</option>'+jgSet.map(j=>opt(j,esc(j),jgCnt[j]||0,F.jg)).join('');
-  // ② 직렬: 선택된 직계 소속
-  const srSet = F.jg ? [...new Set([...Object.keys(TAX[F.jg]||{}), ...all.filter(c=>c.jg.includes(F.jg)).flatMap(c=>c.sr)])].sort((a,b)=>a.localeCompare(b,'ko')) : [];
+  // ② 직렬: 선택된 직계 소속 (TAX)
+  const srSet = F.jg&&TAX[F.jg] ? Object.keys(TAX[F.jg]).sort((a,b)=>a.localeCompare(b,'ko')) : [];
   const srCnt = count(all.filter(c=>!F.jg||c.jg.includes(F.jg)),c=>c.sr);
   const srEl = document.getElementById('selSR');
   srEl.disabled = !F.jg;
   srEl.innerHTML = F.jg ? '<option value="">전체 직렬</option>'+srSet.map(s=>opt(s,esc(s),srCnt[s]||0,F.sr)).join('') : '<option value="">직계를 먼저 선택</option>';
-  // ③ 직무: 선택된 직렬 소속
-  const jbSet = (F.jg&&F.sr) ? [...new Set([...((TAX[F.jg]||{})[F.sr]||[]), ...all.filter(c=>c.jg.includes(F.jg)&&c.sr.includes(F.sr)).flatMap(c=>c.jb)])].sort((a,b)=>a.localeCompare(b,'ko')) : [];
+  // ③ 직무: 선택된 직렬 소속 (TAX)
+  const jbSet = (F.jg&&F.sr&&TAX[F.jg]&&TAX[F.jg][F.sr]) ? TAX[F.jg][F.sr].slice().sort((a,b)=>a.localeCompare(b,'ko')) : [];
   const jbCnt = count(all.filter(c=>(!F.jg||c.jg.includes(F.jg))&&(!F.sr||c.sr.includes(F.sr))),c=>c.jb);
   const jbEl = document.getElementById('selJB');
   jbEl.disabled = !(F.jg&&F.sr);
   jbEl.innerHTML = (F.jg&&F.sr) ? '<option value="">전체 직무</option>'+jbSet.map(j=>opt(j,esc(j),jbCnt[j]||0,F.jb)).join('') : '<option value="">직렬을 먼저 선택</option>';
-  // 교육분류
+  // 교육분류: 마스터
   const cm = count(all,c=>c.cl);
-  document.getElementById('selCL').innerHTML = '<option value="">전체 분류</option>'+Object.keys(cm).sort((a,b)=>cm[b]-cm[a]).map(k=>opt(k,esc(k),cm[k],F.cl)).join('');
+  document.getElementById('selCL').innerHTML = '<option value="">전체 분류</option>'+EDU_TYPES.map(k=>opt(k,esc(k),cm[k]||0,F.cl)).join('');
+  // 교육체계: KTREE 마스터
   const kbm = count(all,c=>c.kb1);
   const kbOrder=['공통역량','리더십역량','직무역량'];
-  const kbKeys=Object.keys(kbm).sort((a,b)=>{const ia=kbOrder.indexOf(a),ib=kbOrder.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)||kbm[b]-kbm[a];});
-  document.getElementById('selKB').innerHTML = '<option value="">전체 교육체계</option>'+kbKeys.map(k=>opt(k,esc(k),kbm[k],F.kb1)).join('');
-  // 교육방법
-  const meths = ['오프라인','온라인','합숙','혼합'];
-  const mm = {}; meths.forEach(m=>mm[m]=all.filter(c=>(c.m||'').includes(m)).length);
-  document.getElementById('selMT').innerHTML = '<option value="">전체 방법</option>'+meths.filter(m=>mm[m]).map(m=>opt(m,m,mm[m],F.mt)).join('');
+  const kbKeys=Object.keys(KTREE).sort((a,b)=>{const ia=kbOrder.indexOf(a),ib=kbOrder.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b,'ko');});
+  document.getElementById('selKB').innerHTML = '<option value="">전체 교육체계</option>'+kbKeys.map(k=>opt(k,esc(k),kbm[k]||0,F.kb1)).join('');
+  // 교육방법: 마스터
+  const mm = count(all,c=>c.m);
+  document.getElementById('selMT').innerHTML = '<option value="">전체 방법</option>'+EDU_METHODS.map(m=>opt(m,m,mm[m]||0,F.mt)).join('');
   document.getElementById('selETC').value = F.etc||'';
 }
 function renderActiveChips(){
@@ -1178,8 +1194,10 @@ function openForm(id){
   yrSel.innerHTML=YEARS.slice().sort((a,b)=>b-a).map(y=>`<option value="${y}">${y}년</option>`).join('');
   yrSel.value=String(c?(c.yr||CUR_YEAR):CUR_YEAR);
   document.getElementById('fm_n').value = c?c.n:'';
-  document.getElementById('fm_cl').value = c?c.cl:'사내교육';
-  document.getElementById('fm_m').value = c?(c.m||''):'';
+  const clv=c?c.cl:'사내교육';
+  document.getElementById('fm_cl').innerHTML=EDU_TYPES.map(t=>`<option ${t===clv?'selected':''}>${esc(t)}</option>`).join('')+((clv&&!EDU_TYPES.includes(clv))?`<option selected value="${esc(clv)}">${esc(clv)} (미등록)</option>`:'');
+  const mv=c?(c.m||''):'';
+  document.getElementById('fm_m').innerHTML='<option value="">선택</option>'+EDU_METHODS.map(t=>`<option ${t===mv?'selected':''}>${esc(t)}</option>`).join('')+((mv&&!EDU_METHODS.includes(mv))?`<option selected value="${esc(mv)}">${esc(mv)} (미등록)</option>`:'');
   document.getElementById('fm_o1').value = c?c.o1:'';
   document.getElementById('fm_o2').value = c?(c.o2||''):'';
   fmSetInst(c?(c.i||''):'');
@@ -1405,9 +1423,14 @@ async function saveForm(){
     log('과정 수정', n);
     toast('✓ 과정 정보가 수정되어 스토어에 반영되었습니다');
   } else {
+    // 중복 이름 경고 (같은 연도에 동일 과정명이 이미 있으면)
+    const dup = CAT.find(x=>x.n===n && (x.yr||2026)===(parseInt(document.getElementById('fm_yr').value)||CUR_YEAR));
+    if(dup){
+      if(!confirm(`같은 연도에 '${n}' 과정이 이미 있습니다.\n\n[확인] 새 과정으로 추가 · [취소] 중단 후 기존 과정을 수정\n\n기존 과정을 고치려면 취소를 누르고 목록에서 「수정」을 사용하세요.`)){ return; }
+    }
     const id = 'NEW_'+Date.now();
-    const c = {id, ...data, _hidden:!published};
-    try{ await apiSaveCourse({...data, id, published}, true); }
+    const c = {id, ...data, grp:id, _hidden:!published};
+    try{ await apiSaveCourse({...data, id, grp:id, published}, true); }
     catch(e){ toast('등록 실패: 서버 연결을 확인하세요'); return; }
     CAT.push(c);
     log('과정 등록', n);
@@ -1426,33 +1449,35 @@ function afFillFilters(){
   const all = CAT;
   const opt=(v,label,n,sel)=>`<option value="${esc(v)}" ${sel===v?'selected':''}>${label}${n!==undefined?' ('+n+')':''}</option>`;
   const cnt=(arr,fn)=>{const m={};arr.forEach(c=>{const k=fn(c);(Array.isArray(k)?k:[k]).forEach(x=>{if(x)m[x]=(m[x]||0)+1;});});return m;};
-  // 직계·직렬·직무 (TAX 기준 + 데이터 병합, 계단식)
-  const jgSet=[...new Set([...Object.keys(TAX), ...all.flatMap(c=>c.jg)])].sort((a,b)=>a.localeCompare(b,'ko'));
+  // ── 직계·직렬·직무: 직무체계(TAX) 마스터만 사용 (과정 데이터 값은 섞지 않음) ──
+  const jgSet=Object.keys(TAX).sort((a,b)=>a.localeCompare(b,'ko'));
   const jgCnt=cnt(all,c=>c.jg);
   document.getElementById('aJG').innerHTML='<option value="">전체 직계</option>'+jgSet.map(j=>opt(j,esc(j),jgCnt[j]||0,AF.jg)).join('');
-  const srSet=AF.jg?[...new Set([...Object.keys(TAX[AF.jg]||{}), ...all.filter(c=>c.jg.includes(AF.jg)).flatMap(c=>c.sr)])].sort((a,b)=>a.localeCompare(b,'ko')):[];
+  const srSet=AF.jg&&TAX[AF.jg]?Object.keys(TAX[AF.jg]).sort((a,b)=>a.localeCompare(b,'ko')):[];
   const srCnt=cnt(all.filter(c=>!AF.jg||c.jg.includes(AF.jg)),c=>c.sr);
   const aSR=document.getElementById('aSR'); aSR.disabled=!AF.jg;
   aSR.innerHTML=AF.jg?'<option value="">전체 직렬</option>'+srSet.map(s=>opt(s,esc(s),srCnt[s]||0,AF.sr)).join(''):'<option value="">직계 먼저</option>';
-  const jbSet=(AF.jg&&AF.sr)?[...new Set([...((TAX[AF.jg]||{})[AF.sr]||[]), ...all.filter(c=>c.jg.includes(AF.jg)&&c.sr.includes(AF.sr)).flatMap(c=>c.jb)])].sort((a,b)=>a.localeCompare(b,'ko')):[];
+  const jbSet=(AF.jg&&AF.sr&&TAX[AF.jg]&&TAX[AF.jg][AF.sr])?TAX[AF.jg][AF.sr].slice().sort((a,b)=>a.localeCompare(b,'ko')):[];
   const jbCnt=cnt(all.filter(c=>(!AF.jg||c.jg.includes(AF.jg))&&(!AF.sr||c.sr.includes(AF.sr))),c=>c.jb);
   const aJB=document.getElementById('aJB'); aJB.disabled=!(AF.jg&&AF.sr);
   aJB.innerHTML=(AF.jg&&AF.sr)?'<option value="">전체 직무</option>'+jbSet.map(j=>opt(j,esc(j),jbCnt[j]||0,AF.jb)).join(''):'<option value="">직렬 먼저</option>';
-  // 교육분류·교육방법
-  const clCnt=cnt(all,c=>c.cl); document.getElementById('aCL').innerHTML='<option value="">전체 교육분류</option>'+Object.keys(clCnt).sort((a,b)=>clCnt[b]-clCnt[a]).map(k=>opt(k,esc(k),clCnt[k],AF.cl)).join('');
-  const mtCnt=cnt(all,c=>c.m); document.getElementById('aMT').innerHTML='<option value="">전체 교육방법</option>'+Object.keys(mtCnt).filter(Boolean).sort((a,b)=>mtCnt[b]-mtCnt[a]).map(k=>opt(k,esc(k),mtCnt[k],AF.mt)).join('');
-  // 교육체계 대분류(직무역량 등) → 중분류 → 소분류 (계단식)
+  // ── 교육분류·교육방법: 마스터 목록 사용 ──
+  const clCnt=cnt(all,c=>c.cl);
+  document.getElementById('aCL').innerHTML='<option value="">전체 교육분류</option>'+EDU_TYPES.map(k=>opt(k,esc(k),clCnt[k]||0,AF.cl)).join('');
+  const mtCnt=cnt(all,c=>c.m);
+  document.getElementById('aMT').innerHTML='<option value="">전체 교육방법</option>'+EDU_METHODS.map(k=>opt(k,esc(k),mtCnt[k]||0,AF.mt)).join('');
+  // ── 교육체계: KTREE 마스터만 사용 (계단식) ──
   const kb1Cnt=cnt(all,c=>c.kb1); const kb1Order=['공통역량','리더십역량','직무역량'];
-  const kb1Set=Object.keys(kb1Cnt).filter(Boolean).sort((a,b)=>{const i=kb1Order.indexOf(a),j=kb1Order.indexOf(b);return(i<0?9:i)-(j<0?9:j)||kb1Cnt[b]-kb1Cnt[a];});
-  document.getElementById('aKB1').innerHTML='<option value="">전체 교육체계(대)</option>'+kb1Set.map(k=>opt(k,esc(k),kb1Cnt[k],AF.kb1)).join('');
-  const kb2Src=all.filter(c=>!AF.kb1||c.kb1===AF.kb1);
-  const kb2Cnt=cnt(kb2Src,c=>c.kb2);
+  const kb1Set=Object.keys(KTREE).sort((a,b)=>{const i=kb1Order.indexOf(a),j=kb1Order.indexOf(b);return(i<0?9:i)-(j<0?9:j)||a.localeCompare(b,'ko');});
+  document.getElementById('aKB1').innerHTML='<option value="">전체 교육체계(대)</option>'+kb1Set.map(k=>opt(k,esc(k),kb1Cnt[k]||0,AF.kb1)).join('');
+  const kb2Set=AF.kb1&&KTREE[AF.kb1]?Object.keys(KTREE[AF.kb1]).sort((a,b)=>a.localeCompare(b,'ko')):[];
+  const kb2Cnt=cnt(all.filter(c=>!AF.kb1||c.kb1===AF.kb1),c=>c.kb2);
   const aKB2=document.getElementById('aKB2'); aKB2.disabled=!AF.kb1;
-  aKB2.innerHTML=AF.kb1?'<option value="">전체 중분류</option>'+Object.keys(kb2Cnt).filter(Boolean).sort((a,b)=>a.localeCompare(b,'ko')).map(k=>opt(k,esc(k),kb2Cnt[k],AF.kb2)).join(''):'<option value="">대분류 먼저</option>';
-  const kb3Src=all.filter(c=>(!AF.kb1||c.kb1===AF.kb1)&&(!AF.kb2||c.kb2===AF.kb2));
-  const kb3Cnt=cnt(kb3Src,c=>c.kb3);
+  aKB2.innerHTML=AF.kb1?'<option value="">전체 중분류</option>'+kb2Set.map(k=>opt(k,esc(k),kb2Cnt[k]||0,AF.kb2)).join(''):'<option value="">대분류 먼저</option>';
+  const kb3Set=(AF.kb1&&AF.kb2&&KTREE[AF.kb1]&&KTREE[AF.kb1][AF.kb2])?KTREE[AF.kb1][AF.kb2].slice().sort((a,b)=>a.localeCompare(b,'ko')):[];
+  const kb3Cnt=cnt(all.filter(c=>(!AF.kb1||c.kb1===AF.kb1)&&(!AF.kb2||c.kb2===AF.kb2)),c=>c.kb3);
   const aKB3=document.getElementById('aKB3'); aKB3.disabled=!AF.kb2;
-  aKB3.innerHTML=AF.kb2?'<option value="">전체 소분류</option>'+Object.keys(kb3Cnt).filter(Boolean).sort((a,b)=>a.localeCompare(b,'ko')).map(k=>opt(k,esc(k),kb3Cnt[k],AF.kb3)).join(''):'<option value="">중분류 먼저</option>';
+  aKB3.innerHTML=AF.kb2?'<option value="">전체 소분류</option>'+kb3Set.map(k=>opt(k,esc(k),kb3Cnt[k]||0,AF.kb3)).join(''):'<option value="">중분류 먼저</option>';
   document.getElementById('aFilter').value=AF.state||'';
 }
 function acFilteredCourses(){
@@ -1478,8 +1503,8 @@ function acFilteredCourses(){
 let courseGridOn=false;
 let acDirty=new Set();  // 수정된 과정 id
 const AC_COLS=[
-  ['n','과정명','200','text'],['yr','연도','70','year'],['cl','교육분류','110','sel:사내교육,국내위탁,해외위탁,온라인'],
-  ['i','교육기관','170','inst'],['m','교육방법','120','sel:,오프라인비합숙,오프라인합숙,온라인,혼합'],
+  ['n','과정명','200','text'],['yr','연도','70','year'],['cl','교육분류','110','cl'],
+  ['i','교육기관','170','inst'],['m','교육방법','120','mt'],
   ['d','교육일','62','num'],['h','시간','62','num'],['p','교육장소','130','text'],
   ['jg','직계','120','jg'],['sr','직렬','140','sr'],['jb','직무','170','jb'],['lv','수준','70','lv'],
   ['kb1','교육체계대','120','kb1'],['kb2','중분류','120','kb2'],['kb3','소분류','110','kb3']
@@ -1544,6 +1569,14 @@ function acCell(vis,ci,k,type,v,c,p){
   }
   if(type==='lv'){
     return `<select ${oncell} onchange="acEdit(${vis},'lv',this.value)"><option value="">-</option>${[1,2,3,4,5].map(l=>`<option value="${l}" ${String(v)===String(l)?'selected':''}>Lv${l}</option>`).join('')}</select>`;
+  }
+  if(type==='cl'){
+    const ok=!v||EDU_TYPES.includes(v);
+    return `<select ${oncell} class="${ok?'':'unaligned'}" onchange="acEdit(${vis},'cl',this.value)"><option value="">-</option>${EDU_TYPES.map(o=>`<option ${v===o?'selected':''}>${esc(o)}</option>`).join('')}${(!ok&&v)?`<option selected value="${esc(v)}">⚠ ${esc(v)} (미등록)</option>`:''}</select>`;
+  }
+  if(type==='mt'){
+    const ok=!v||EDU_METHODS.includes(v);
+    return `<select ${oncell} class="${ok?'':'unaligned'}" onchange="acEdit(${vis},'m',this.value)"><option value="">-</option>${EDU_METHODS.map(o=>`<option ${v===o?'selected':''}>${esc(o)}</option>`).join('')}${(!ok&&v)?`<option selected value="${esc(v)}">⚠ ${esc(v)} (미등록)</option>`:''}</select>`;
   }
   if(type.startsWith('sel:')){
     const opts=type.slice(4).split(',');
@@ -1690,7 +1723,7 @@ function renderAdmin(){
     <td style="white-space:nowrap">
       <button class="sbtn" style="padding:3px 9px;font-size:11px" onclick="openForm('${c.id}')">수정</button>
       <button class="sbtn" style="padding:3px 9px;font-size:11px" onclick="toggleHide('${c.id}')">${c._hidden?'게시':'숨김'}</button>
-      ${String(c.id).startsWith('NEW_')?`<button class="sbtn red" style="padding:3px 9px;font-size:11px" onclick="delCourse('${c.id}')">삭제</button>`:''}
+      <button class="sbtn red" style="padding:3px 9px;font-size:11px" onclick="delCourse('${c.id}')">삭제</button>
     </td>
   </tr>`).join(''):'<tr><td colspan="10" style="text-align:center;padding:36px;color:var(--mute)">조건에 맞는 과정이 없습니다. 「필터 초기화」로 전체를 보거나 조건을 바꿔보세요.</td></tr>';
   document.getElementById('stTag').innerHTML = storageOK
@@ -1706,11 +1739,12 @@ async function toggleHide(id){
   render(); renderAdmin();
 }
 async function delCourse(id){
-  if(!confirm('등록한 과정을 삭제할까요?')) return;
   const c = CAT.find(x=>x.id===id);
+  if(!confirm(`'${c?c.n:id}' 과정을 삭제할까요?\n삭제하면 스토어에서 사라지며 되돌릴 수 없습니다.`)) return;
   try{ await apiDeleteCourse(id); }catch(e){ toast('삭제 실패: 서버 연결을 확인하세요'); return; }
   CAT = CAT.filter(x=>x.id!==id);
   log('과정 삭제', c?c.n:id); renderAdmin(); render();
+  toast('✓ 과정이 삭제되었습니다');
 }
 function exportCatalogCSV(){
   dlCSV(visCat().map(c=>({과정ID:c.id, 교육과정명:c.n, 교육분류:c.cl, 교육체계대분류:c.kb1, 교육체계중분류:c.kb2, 교육체계소분류:c.kb3, 교육기관:c.i, 교육방법:c.m, 교육일:c.d, 교육시간:c.h, 교육장소:c.p, 비고:[c.mu==='O'?'필수':'',c.nw==='O'?'신규':'',c.rec==='O'?'추천':''].filter(Boolean).join('/'), 역량:(c.cp||[]).join('; '), 수준:c.lv!==''&&c.lv!=null?'Lv'+c.lv:'', 직계:c.jg.join('/'), 직렬:c.sr.join('/'), 직무:c.jb.join('/'), 주관:c.o1, 교육목표:c.g})), '한수원_표준과정_카탈로그.csv');
@@ -2481,6 +2515,57 @@ function renderFrame(){
   document.getElementById('stTag5').innerHTML = storageOK
     ? '<span class="storage-tag st-on">● 클라우드 서버 연결됨 — 자동 저장</span>'
     : '<span class="storage-tag st-off">● 서버 미연결</span>';
+  renderEduMasters();
+}
+/* ── 교육분류·교육방법 마스터 관리 ── */
+function renderEduMasters(){
+  const clCnt={}, mtCnt={};
+  visCat().forEach(c=>{ if(c.cl)clCnt[c.cl]=(clCnt[c.cl]||0)+1; if(c.m)mtCnt[c.m]=(mtCnt[c.m]||0)+1; });
+  const el=document.getElementById('etList');
+  if(el) el.innerHTML = EDU_TYPES.map(t=>`
+    <div class="txitem">${esc(t)}
+      <span class="ct">${clCnt[t]||0}</span>
+      <button class="del" style="margin-left:4px" onclick="editEduType('${esc(t).replace(/'/g,"\\'")}')">수정</button>
+      <button class="del" onclick="delEduType('${esc(t).replace(/'/g,"\\'")}')">삭제</button>
+    </div>`).join('')||'<div class="txempty">교육분류가 없습니다</div>';
+  const em=document.getElementById('emList');
+  if(em) em.innerHTML = EDU_METHODS.map(t=>`
+    <div class="txitem">${esc(t)}
+      <span class="ct">${mtCnt[t]||0}</span>
+      <button class="del" style="margin-left:4px" onclick="editEduMethod('${esc(t).replace(/'/g,"\\'")}')">수정</button>
+      <button class="del" onclick="delEduMethod('${esc(t).replace(/'/g,"\\'")}')">삭제</button>
+    </div>`).join('')||'<div class="txempty">교육방법이 없습니다</div>';
+}
+function addEduType(){ const n=prompt('추가할 교육분류명'); if(!n||!n.trim())return; const v=n.trim();
+  if(EDU_TYPES.includes(v)){toast('이미 존재');return;} EDU_TYPES.push(v); log('교육분류 추가',v); renderEduMasters(); toast('✓ 추가되었습니다'); }
+function editEduType(old){ const n=prompt('교육분류명 수정',old); if(!n||!n.trim()||n.trim()===old)return; const v=n.trim();
+  if(EDU_TYPES.includes(v)){toast('이미 존재');return;}
+  EDU_TYPES=EDU_TYPES.map(x=>x===old?v:x);
+  let ch=0; CAT.forEach(c=>{ if(c.cl===old){ c.cl=v; ch++; } });
+  bulkSaveChanged(CAT.filter(c=>c.cl===v)); log('교육분류 수정',old+' → '+v); renderEduMasters(); renderAdmin(); render();
+  toast(`✓ 교육분류가 수정되었습니다 (연계 과정 ${ch}건 반영)`); }
+function delEduType(v){ if(!confirm(`'${v}' 교육분류를 삭제할까요?\n이 분류를 쓰던 과정은 교육분류가 빈칸이 되어 다시 지정해야 합니다.`))return;
+  EDU_TYPES=EDU_TYPES.filter(x=>x!==v);
+  const affected=CAT.filter(c=>c.cl===v); affected.forEach(c=>c.cl='');
+  bulkSaveChanged(affected); log('교육분류 삭제',v); renderEduMasters(); renderAdmin(); render();
+  toast(`✓ 삭제되었습니다 (과정 ${affected.length}건은 교육분류 빈칸)`); }
+function addEduMethod(){ const n=prompt('추가할 교육방법명'); if(!n||!n.trim())return; const v=n.trim();
+  if(EDU_METHODS.includes(v)){toast('이미 존재');return;} EDU_METHODS.push(v); log('교육방법 추가',v); renderEduMasters(); toast('✓ 추가되었습니다'); }
+function editEduMethod(old){ const n=prompt('교육방법명 수정',old); if(!n||!n.trim()||n.trim()===old)return; const v=n.trim();
+  if(EDU_METHODS.includes(v)){toast('이미 존재');return;}
+  EDU_METHODS=EDU_METHODS.map(x=>x===old?v:x);
+  let ch=0; CAT.forEach(c=>{ if(c.m===old){ c.m=v; ch++; } });
+  bulkSaveChanged(CAT.filter(c=>c.m===v)); log('교육방법 수정',old+' → '+v); renderEduMasters(); renderAdmin(); render();
+  toast(`✓ 교육방법이 수정되었습니다 (연계 과정 ${ch}건 반영)`); }
+function delEduMethod(v){ if(!confirm(`'${v}' 교육방법을 삭제할까요?\n이 방법을 쓰던 과정은 교육방법이 빈칸이 되어 다시 지정해야 합니다.`))return;
+  EDU_METHODS=EDU_METHODS.filter(x=>x!==v);
+  const affected=CAT.filter(c=>c.m===v); affected.forEach(c=>c.m='');
+  bulkSaveChanged(affected); log('교육방법 삭제',v); renderEduMasters(); renderAdmin(); render();
+  toast(`✓ 삭제되었습니다 (과정 ${affected.length}건은 교육방법 빈칸)`); }
+// 변경된 과정들을 서버에 저장 (일괄)
+async function bulkSaveChanged(list){
+  if(!storageOK||!list.length) return;
+  for(const c of list){ try{ await apiSaveCourse({...c, published:!c._hidden}, String(c.id).startsWith('NEW_')); }catch(e){} }
 }
 async function addKB(lvl){
   if(lvl===1){ const n=prompt('추가할 대분류명 (예: 공통역량)'); if(!n||!n.trim())return; const v=n.trim();
