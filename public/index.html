@@ -137,6 +137,21 @@ aside{position:sticky;top:118px;max-height:calc(100vh - 132px);overflow-y:auto;d
 .instchip small{font-size:11px;color:var(--mute);margin-left:auto;margin-right:6px}
 .instchip .x{cursor:pointer;color:var(--mute);font-weight:700}
 .instchip .x:hover{color:var(--red)}
+.gridbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.gridhint{font-size:11px;color:var(--mute)}
+.gridscroll{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:10px}
+.editgrid{border-collapse:collapse;width:100%;font-size:12.5px}
+.editgrid th{position:sticky;top:0;background:var(--khnp-deep,#102A54);color:#fff;font-weight:600;font-size:11.5px;padding:8px 10px;text-align:left;white-space:nowrap;z-index:2}
+.editgrid td{border:1px solid #E4E9F0;padding:0;vertical-align:middle}
+.editgrid td.rm{text-align:center;width:34px;background:#FAFBFD}
+.editgrid td.rm button{color:var(--red);font-weight:700;padding:4px 8px;font-size:13px}
+.editgrid td.rm button:hover{background:var(--red-soft);border-radius:5px}
+.editgrid input,.editgrid select,.editgrid textarea{width:100%;border:none;background:transparent;padding:7px 9px;font-size:12.5px;outline:none;box-sizing:border-box;font-family:inherit}
+.editgrid input:focus,.editgrid select:focus,.editgrid textarea:focus{background:#EEF5FF;box-shadow:inset 0 0 0 2px var(--khnp)}
+.editgrid tr:nth-child(even) td{background:#FAFBFD}
+.editgrid tr:hover td{background:#F2F7FF}
+.editgrid .cellnum{text-align:center;color:var(--mute);font-size:11px;width:40px;background:#F6F8FB}
+.gridbar .green,.sbtn.green{background:var(--green,#0E7A4B);color:#fff}
 .afilters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center}
 .afilters .sbtn{font-size:12px}
 .afilters .afq{width:200px}
@@ -503,12 +518,22 @@ tr:hover td{background:#FAFBFD}
   <div class="panel">
     <div class="p-h"><b>교육기관 관리</b><span id="stTag3"></span>
       <span class="sp">
-        <input id="inQ" class="sbtn" style="width:220px" placeholder="기관명 · 주소 검색..." oninput="renderInst()">
+        <input id="inQ" class="sbtn" style="width:200px" placeholder="기관명 · 주소 검색..." oninput="renderInst();renderInstGrid()">
         <button class="sbtn amber" onclick="openInstForm()">＋ 교육기관 등록</button>
         <button class="sbtn" onclick="exportInstCSV()">교육기관 CSV</button>
+        <button class="sbtn blue" id="inGridBtn" onclick="toggleInstGrid()">⊞ 엑셀형 편집</button>
       </span>
     </div>
-    <div class="tblwrap"><table id="inTable"><thead><tr>
+    <div id="inGridWrap" style="display:none">
+      <div class="gridbar">
+        <button class="sbtn amber" onclick="instGridAddRow()">＋ 행 추가</button>
+        <button class="sbtn green" onclick="saveInstGrid()">💾 전체 저장</button>
+        <button class="sbtn" onclick="toggleInstGrid()">표 보기로 전환</button>
+        <span class="gridhint">셀 클릭 후 수정 · 행 앞 ✕ 삭제 · <b>엑셀에서 복사한 표를 셀에 붙여넣기(Ctrl+V)</b>하면 그 위치부터 채워집니다 · 「전체 저장」으로 서버 반영</span>
+      </div>
+      <div class="gridscroll"><table class="editgrid" id="inGrid"></table></div>
+    </div>
+    <div class="tblwrap" id="inTableWrap"><table id="inTable"><thead><tr>
       <th style="width:20%">교육기관명</th><th>사업자등록번호</th><th>주소</th><th>연락처</th><th>홈페이지</th><th>비고</th><th>연계 과정</th><th style="width:120px"></th>
     </tr></thead><tbody></tbody></table></div>
     <div class="note">여기서 등록·수정한 교육기관은 <b>데이터관리(과정 등록)</b> 양식의 교육기관 선택 목록에 즉시 반영됩니다. 과정 등록 시 기관을 선택하면 기본 교육장소·교육방법이 자동으로 채워집니다. 「연계 과정」은 해당 기관으로 등록된 게시중 과정 수입니다.</div>
@@ -527,9 +552,19 @@ tr:hover td{background:#FAFBFD}
         <select id="cpFilterJB" class="sbtn" onchange="renderComp()"><option value="">전체 직무</option></select>
         <button class="sbtn amber" onclick="openCompForm()">＋ 역량 등록</button>
         <button class="sbtn" onclick="exportCompCSV()">역량 CSV</button>
+        <button class="sbtn blue" id="cpGridBtn" onclick="toggleCompGrid()">⊞ 엑셀형 편집</button>
       </span>
     </div>
-    <div class="tblwrap"><table id="cpTable"><thead><tr>
+    <div id="cpGridWrap" style="display:none">
+      <div class="gridbar">
+        <button class="sbtn amber" onclick="compGridAddRow()">＋ 행 추가</button>
+        <button class="sbtn green" onclick="saveCompGrid()">💾 전체 저장</button>
+        <button class="sbtn" onclick="toggleCompGrid()">표 보기로 전환</button>
+        <span class="gridhint">직계·직렬·직무는 드롭다운, 역량명·레벨은 셀 편집 · <b>엑셀 복사→붙여넣기(Ctrl+V)</b> 지원(열 순서: 직계·직렬·직무·역량명·레벨) · 「전체 저장」으로 서버 반영</span>
+      </div>
+      <div class="gridscroll"><table class="editgrid" id="cpGrid"></table></div>
+    </div>
+    <div class="tblwrap" id="cpTableWrap"><table id="cpTable"><thead><tr>
       <th>직계</th><th>직렬</th><th>직무</th><th style="width:32%">역량명</th><th>레벨</th><th>연계 과정</th><th style="width:120px"></th>
     </tr></thead><tbody></tbody></table></div>
     <div class="note">「＋ 역량 등록」에서 직계·직렬·직무·레벨을 선택하고 역량명을 입력하면 즉시 역량 마스터에 반영됩니다. 여기 등록한 역량은 <b>데이터관리(과정 등록)</b>에서 같은 경로를 선택할 때 추천 역량으로 제시되어 교육과정과 연계됩니다. 「연계 과정」은 그 역량이 매핑된 게시중 과정 수입니다. 표시 건수: <span id="cpShown"></span> (최대 300건 — 검색으로 좁혀주세요)</div>
@@ -549,7 +584,17 @@ tr:hover td{background:#FAFBFD}
         <button class="sbtn" onclick="exportBackup()">전체 백업(JSON)</button>
         <button class="sbtn" onclick="document.getElementById('impFile').click()">백업 불러오기</button>
         <input type="file" id="impFile" accept=".json" style="display:none" onchange="importBackup(event)">
+        <button class="sbtn blue" id="acGridBtn" onclick="toggleCourseGrid()">⊞ 엑셀형 편집</button>
       </span>
+    </div>
+    <div id="acGridWrap" style="display:none">
+      <div class="gridbar">
+        <button class="sbtn amber" onclick="courseGridAddRow()">＋ 행 추가</button>
+        <button class="sbtn green" onclick="saveCourseGrid()">💾 전체 저장</button>
+        <button class="sbtn" onclick="toggleCourseGrid()">표 보기로 전환</button>
+        <span class="gridhint">현재 필터로 좁혀진 과정이 편집 대상입니다. 셀 편집 · <b>엑셀 복사→붙여넣기(Ctrl+V)</b> 지원 · 직계·직렬·직무는 대표 매핑 1건 기준(세부 다중매핑·역량은 「표 보기」의 수정 버튼에서). 「전체 저장」으로 서버 반영.</span>
+      </div>
+      <div class="gridscroll"><table class="editgrid" id="acGrid"></table></div>
     </div>
     <div class="afilters">
       <input id="aQ" class="sbtn afq" placeholder="과정명·기관 검색..." oninput="renderAdmin()">
@@ -568,7 +613,7 @@ tr:hover td{background:#FAFBFD}
       </select>
       <button class="sbtn" onclick="resetAF()">필터 초기화</button>
     </div>
-    <div class="tblwrap"><table id="aTable"><thead><tr>
+    <div class="tblwrap" id="acTableWrap"><table id="aTable"><thead><tr>
       <th style="width:22%">과정명</th><th>교육기관</th><th>방법</th><th>교육일</th><th>시간</th><th>장소</th><th>비고</th><th>수준</th><th>상태</th><th style="width:150px"></th>
     </tr></thead><tbody></tbody></table></div>
     <div class="note"><b>Excel 일괄 등록</b>으로 여러 과정을 한 번에 올릴 수 있습니다(제공된 「일괄등록 샘플100」 형식 사용 — 열: 교육과정명·교육분류·교육기관·교육방법·교육일·교육시간·교육장소·직계·직렬·직무·역량·수준·비고·교육목표). 「＋ 신규 과정 등록」으로 개별 입력 시에도 즉시 <b>과정 스토어에 1행으로 게시</b>됩니다. 행의 「수정」으로 등록 양식을 다시 열어 고칠 수 있습니다. 표시 건수: <span id="aShown"></span> (최대 300건씩 — 검색으로 좁혀주세요)</div>
@@ -1402,17 +1447,9 @@ function afFillFilters(){
   aKB3.innerHTML=AF.kb2?'<option value="">전체 소분류</option>'+Object.keys(kb3Cnt).filter(Boolean).sort((a,b)=>a.localeCompare(b,'ko')).map(k=>opt(k,esc(k),kb3Cnt[k],AF.kb3)).join(''):'<option value="">중분류 먼저</option>';
   document.getElementById('aFilter').value=AF.state||'';
 }
-function renderAdmin(){
-  const vis = visCat();
-  document.getElementById('aKpis').innerHTML = `
-    <div class="kpi" style="--kc:#0B5BD3"><small>게시중 과정</small><b>${vis.length.toLocaleString()}</b><span>개 (스토어 표시)</span></div>
-    <div class="kpi" style="--kc:#F08A00"><small>신규 등록</small><b>${OVERRIDES.added.length}</b><span>개 과정</span></div>
-    <div class="kpi" style="--kc:#5A6B84"><small>숨김 과정</small><b>${OVERRIDES.hidden.length}</b><span>개</span></div>
-    <div class="kpi" style="--kc:#0E9F6E"><small>직계 · 직렬 · 직무</small><b>${[...new Set(vis.flatMap(c=>c.jg))].length} · ${[...new Set(vis.flatMap(c=>c.sr))].length} · ${[...new Set(vis.flatMap(c=>c.jb))].length}</b><span>개</span></div>
-    <div class="kpi" style="--kc:#6D5BD0"><small>수정 이력</small><b>${Object.keys(OVERRIDES.edits).length}</b><span>건</span></div>`;
-  afFillFilters();
+function acFilteredCourses(){
   const q = (document.getElementById('aQ').value||'').toLowerCase();
-  let rows = CAT.filter(c=>{
+  return CAT.filter(c=>{
     if(q && !(c.n.toLowerCase().includes(q)||(c.i||'').toLowerCase().includes(q)||(c.o1||'').toLowerCase().includes(q))) return false;
     if(AF.jg && !c.jg.includes(AF.jg)) return false;
     if(AF.sr && !c.sr.includes(AF.sr)) return false;
@@ -1425,8 +1462,179 @@ function renderAdmin(){
     if(AF.state==='new' && !String(c.id).startsWith('NEW_')) return false;
     if(AF.state==='hidden' && !c._hidden) return false;
     return true;
+  }).sort((a,b)=>(String(b.id).startsWith('NEW_')-String(a.id).startsWith('NEW_'))||a.n.localeCompare(b.n,'ko'));
+}
+
+/* ============ COURSE GRID (엑셀형) ============ */
+let courseGridOn=false;
+let acDirty=new Set();  // 수정된 과정 id
+const AC_COLS=[
+  ['n','과정명','200','text'],['yr','연도','70','year'],['cl','교육분류','110','sel:사내교육,국내위탁,해외위탁,온라인'],
+  ['i','교육기관','170','inst'],['m','교육방법','120','sel:,오프라인비합숙,오프라인합숙,온라인,혼합'],
+  ['d','교육일','62','num'],['h','시간','62','num'],['p','교육장소','130','text'],
+  ['jg','직계','120','jg'],['sr','직렬','140','sr'],['jb','직무','170','jb'],['lv','수준','70','lv'],
+  ['kb1','교육체계대','120','kb1'],['kb2','중분류','120','kb2'],['kb3','소분류','110','kb3']
+];
+function toggleCourseGrid(){
+  courseGridOn=!courseGridOn;
+  document.getElementById('acGridWrap').style.display=courseGridOn?'block':'none';
+  document.getElementById('acTableWrap').style.display=courseGridOn?'none':'block';
+  document.getElementById('acGridBtn').classList.toggle('blue', !courseGridOn);
+  if(courseGridOn){ acDirty=new Set(); renderCourseGrid(); }
+}
+function acPrimary(c){ return (c.map&&c.map[0])?c.map[0]:['','','', '',[]]; }
+function renderCourseGrid(){
+  if(!courseGridOn) return;
+  const rows=acFilteredCourses();
+  window._acRows=rows;
+  const shown=rows.slice(0,400);
+  let html='<thead><tr><th class="cellnum">#</th>'+AC_COLS.map(c=>`<th style="min-width:${c[2]}px">${c[1]}</th>`).join('')+'</tr></thead><tbody>';
+  html+=shown.map((c,vis)=>{
+    const p=acPrimary(c);
+    const val=(k)=>{ if(k==='jg')return p[0]||''; if(k==='sr')return p[1]||''; if(k==='jb')return p[2]||''; if(k==='lv')return (p[3]??'')===''?'':p[3]; return c[k]??''; };
+    return '<tr>'+`<td class="cellnum">${vis+1}</td>`+AC_COLS.map((col,ci)=>{
+      const k=col[0], type=col[3], v=val(k);
+      return '<td>'+acCell(vis,ci,k,type,v,c,p)+'</td>';
+    }).join('')+'</tr>';
+  }).join('');
+  html+='</tbody>';
+  document.getElementById('acGrid').innerHTML=html;
+}
+function acCell(vis,ci,k,type,v,c,p){
+  const oncell=`onpaste="courseGridPaste(event,${vis},${ci})"`;
+  if(type==='text'||type==='num'){
+    return `<input value="${esc(v)}" ${oncell} oninput="acEdit(${vis},'${k}',this.value)" ${type==='num'?'inputmode="numeric"':''} ${k==='n'?'style="font-weight:600"':''}>`;
+  }
+  if(type==='year'){
+    return `<select ${oncell} onchange="acEdit(${vis},'yr',this.value)">${YEARS.slice().sort((a,b)=>b-a).map(y=>`<option value="${y}" ${String(v)===String(y)?'selected':''}>${y}</option>`).join('')}</select>`;
+  }
+  if(type==='lv'){
+    return `<select ${oncell} onchange="acEdit(${vis},'lv',this.value)"><option value="">-</option>${[1,2,3,4,5].map(l=>`<option value="${l}" ${String(v)===String(l)?'selected':''}>Lv${l}</option>`).join('')}</select>`;
+  }
+  if(type.startsWith('sel:')){
+    const opts=type.slice(4).split(',');
+    return `<select ${oncell} onchange="acEdit(${vis},'${k}',this.value)">${opts.map(o=>`<option value="${esc(o)}" ${v===o?'selected':''}>${o||'-'}</option>`).join('')}</select>`;
+  }
+  if(type==='inst'){
+    // datalist 형태 검색 입력 (기관 목록)
+    return `<input list="acInstList" value="${esc(v)}" ${oncell} onchange="acEdit(${vis},'i',this.value)" oninput="acEdit(${vis},'i',this.value)">`;
+  }
+  if(type==='jg'){
+    const jgs=Object.keys(TAX).sort((a,b)=>a.localeCompare(b,'ko'));
+    return `<select ${oncell} onchange="acEditPath(${vis},'jg',this.value)"><option value="">-</option>${jgs.map(j=>`<option ${v===j?'selected':''}>${esc(j)}</option>`).join('')}</select>`;
+  }
+  if(type==='sr'){
+    const srs=p[0]&&TAX[p[0]]?Object.keys(TAX[p[0]]).sort((a,b)=>a.localeCompare(b,'ko')):[];
+    return `<select ${oncell} onchange="acEditPath(${vis},'sr',this.value)" ${p[0]?'':'disabled'}><option value="">-</option>${srs.map(s=>`<option ${v===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`;
+  }
+  if(type==='jb'){
+    const jbs=(p[0]&&p[1]&&TAX[p[0]]&&TAX[p[0]][p[1]])?TAX[p[0]][p[1]].slice().sort((a,b)=>a.localeCompare(b,'ko')):[];
+    return `<select ${oncell} onchange="acEditPath(${vis},'jb',this.value)" ${p[1]?'':'disabled'}><option value="">-</option>${jbs.map(j=>`<option ${v===j?'selected':''}>${esc(j)}</option>`).join('')}</select>`;
+  }
+  if(type==='kb1'){
+    return `<select ${oncell} onchange="acEditKb(${vis},'kb1',this.value)"><option value="">-</option>${Object.keys(KTREE).map(d=>`<option ${v===d?'selected':''}>${esc(d)}</option>`).join('')}</select>`;
+  }
+  if(type==='kb2'){
+    const js=c.kb1&&KTREE[c.kb1]?Object.keys(KTREE[c.kb1]):[];
+    return `<select ${oncell} onchange="acEditKb(${vis},'kb2',this.value)" ${c.kb1?'':'disabled'}><option value="">-</option>${js.map(j=>`<option ${v===j?'selected':''}>${esc(j)}</option>`).join('')}</select>`;
+  }
+  if(type==='kb3'){
+    const ss=(c.kb1&&c.kb2&&KTREE[c.kb1]&&KTREE[c.kb1][c.kb2])?KTREE[c.kb1][c.kb2]:[];
+    return `<select ${oncell} onchange="acEditKb(${vis},'kb3',this.value)" ${c.kb2?'':'disabled'}><option value="">-</option>${ss.map(s=>`<option ${v===s?'selected':''}>${esc(s)}</option>`).join('')}</select>`;
+  }
+  return `<input value="${esc(v)}" ${oncell}>`;
+}
+function acRowCourse(vis){ return window._acRows[vis]; }
+function acEdit(vis,k,val){
+  const c=acRowCourse(vis); if(!c) return;
+  if(k==='yr') c.yr=parseInt(val)||c.yr; else c[k]=val;
+  acDirty.add(c.id);
+}
+function acEditPath(vis,field,val){
+  const c=acRowCourse(vis); if(!c) return;
+  if(!c.map||!c.map.length) c.map=[['','','', '',[]]];
+  const p=c.map[0];
+  if(field==='jg'){ p[0]=val; p[1]=''; p[2]=''; }
+  else if(field==='sr'){ p[1]=val; p[2]=''; }
+  else if(field==='jb'){ p[2]=val; }
+  c.jg=[...new Set(c.map.map(m=>m[0]).filter(Boolean))];
+  c.sr=[...new Set(c.map.map(m=>m[1]).filter(Boolean))];
+  c.jb=[...new Set(c.map.map(m=>m[2]).filter(Boolean))];
+  acDirty.add(c.id); renderCourseGrid();
+}
+function acEditKb(vis,k,val){
+  const c=acRowCourse(vis); if(!c) return;
+  c[k]=val;
+  if(k==='kb1'){ c.kb2=''; c.kb3=''; } else if(k==='kb2'){ c.kb3=''; }
+  acDirty.add(c.id); renderCourseGrid();
+}
+function courseGridAddRow(){
+  const id='NEW_'+Date.now();
+  const c={id, n:'', cl:'사내교육', i:'', m:'', d:'', h:'', p:'', o1:'', o2:'', g:'', ct:'', link:'',
+    kb1:'', kb2:'', kb3:'', yr:CUR_YEAR, grp:id, lv:'', cp:[], tags:[], mu:'X', nw:'O', rec:'X',
+    jg:[], sr:[], jb:[], map:[['','','', '',[]]], _hidden:false};
+  CAT.unshift(c); acDirty.add(id); renderCourseGrid();
+  setTimeout(()=>{ const inp=document.querySelector('#acGrid tbody tr:first-child input'); if(inp) inp.focus(); },0);
+}
+function courseGridPaste(ev, rowVis, colStart){
+  const text=(ev.clipboardData||window.clipboardData).getData('text');
+  if(!text || (!text.includes('\t') && !text.includes('\n'))) return;
+  ev.preventDefault();
+  const grid=text.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(r=>r.split('\t'));
+  const rows=window._acRows;
+  grid.forEach((cells,ri)=>{
+    let vis=rowVis+ri;
+    // 부족하면 새 과정 행 추가
+    while(vis>=rows.length){
+      const id='NEW_'+Date.now()+'_'+vis;
+      const nc={id,n:'',cl:'사내교육',i:'',m:'',d:'',h:'',p:'',o1:'',o2:'',g:'',ct:'',link:'',kb1:'',kb2:'',kb3:'',yr:CUR_YEAR,grp:id,lv:'',cp:[],tags:[],mu:'X',nw:'O',rec:'X',jg:[],sr:[],jb:[],map:[['','','', '',[]]],_hidden:false};
+      CAT.push(nc); rows.push(nc); acDirty.add(id);
+    }
+    const c=rows[vis]; if(!c.map||!c.map.length) c.map=[['','','', '',[]]];
+    cells.forEach((raw,ci)=>{
+      const col=AC_COLS[colStart+ci]; if(!col) return; const k=col[0], v=raw.trim();
+      if(['jg','sr','jb'].includes(k)){ const p=c.map[0]; const pi={jg:0,sr:1,jb:2}[k]; p[pi]=v;
+        c.jg=[...new Set(c.map.map(m=>m[0]).filter(Boolean))]; c.sr=[...new Set(c.map.map(m=>m[1]).filter(Boolean))]; c.jb=[...new Set(c.map.map(m=>m[2]).filter(Boolean))]; }
+      else if(k==='lv'){ const p=c.map[0]; const n=parseInt(v.replace(/[^0-9]/g,'')); p[3]=(n>=1&&n<=5)?n:''; c.lv=p[3]; }
+      else if(k==='yr'){ c.yr=parseInt(v)||CUR_YEAR; }
+      else c[k]=v;
+    });
+    acDirty.add(c.id);
   });
-  rows.sort((a,b)=>(String(b.id).startsWith('NEW_')-String(a.id).startsWith('NEW_'))||a.n.localeCompare(b.n,'ko'));
+  renderCourseGrid();
+  toast('✓ '+grid.length+'행 붙여넣기 완료. 「전체 저장」으로 서버 반영하세요');
+}
+async function saveCourseGrid(){
+  const ids=[...acDirty]; if(!ids.length){ toast('변경된 과정이 없습니다'); return; }
+  const targets=ids.map(id=>CAT.find(c=>c.id===id)).filter(c=>c && (c.n||'').trim());
+  if(!targets.length){ toast('저장할 과정이 없습니다 (과정명 필요)'); return; }
+  let ok=0, fail=0;
+  toast('저장 중… '+targets.length+'건');
+  for(const c of targets){
+    // map의 첫 줄 레벨을 대표 lv로
+    const p=acPrimary(c); if(p&&p[3]!==''&&p[3]!=null) c.lv=p[3];
+    const payload={...c, published:!c._hidden};
+    const isNew=String(c.id).startsWith('NEW_');
+    try{ await apiSaveCourse(payload, isNew); ok++; }catch(e){ fail++; }
+  }
+  acDirty=new Set();
+  log('과정 격자 저장', ok+'건'+(fail?(' / 실패 '+fail):''));
+  renderCourseGrid(); renderAdmin();
+  toast('✓ '+ok+'건 저장'+(fail?(' · '+fail+'건 실패(서버 확인)'):''));
+}
+
+function renderAdmin(){
+  const vis = visCat();
+  document.getElementById('aKpis').innerHTML = `
+    <div class="kpi" style="--kc:#0B5BD3"><small>게시중 과정</small><b>${vis.length.toLocaleString()}</b><span>개 (스토어 표시)</span></div>
+    <div class="kpi" style="--kc:#F08A00"><small>신규 등록</small><b>${OVERRIDES.added.length}</b><span>개 과정</span></div>
+    <div class="kpi" style="--kc:#5A6B84"><small>숨김 과정</small><b>${OVERRIDES.hidden.length}</b><span>개</span></div>
+    <div class="kpi" style="--kc:#0E9F6E"><small>직계 · 직렬 · 직무</small><b>${[...new Set(vis.flatMap(c=>c.jg))].length} · ${[...new Set(vis.flatMap(c=>c.sr))].length} · ${[...new Set(vis.flatMap(c=>c.jb))].length}</b><span>개</span></div>
+    <div class="kpi" style="--kc:#6D5BD0"><small>수정 이력</small><b>${Object.keys(OVERRIDES.edits).length}</b><span>건</span></div>`;
+  afFillFilters();
+  document.getElementById('acInstList2') || (function(){ const dl=document.createElement('datalist'); dl.id='acInstList'; document.body.appendChild(dl); })();
+  const dl=document.getElementById('acInstList'); if(dl) dl.innerHTML=INSTS.map(x=>`<option value="${esc(x.name)}">`).join('');
+  const rows = acFilteredCourses();
   const shown = rows.slice(0,300);
   document.getElementById('aShown').textContent = shown.length+' / '+rows.length;
   document.querySelector('#aTable tbody').innerHTML = shown.length?shown.map(c=>`<tr style="${c._hidden?'opacity:.45':''}">
@@ -1664,6 +1872,72 @@ function exportTaxCSV(){
 
 /* ============ INSTITUTION MGMT ============ */
 let editingInst = null;
+let instGridOn = false;
+function toggleInstGrid(){
+  instGridOn = !instGridOn;
+  document.getElementById('inGridWrap').style.display = instGridOn?'block':'none';
+  document.getElementById('inTableWrap').style.display = instGridOn?'none':'block';
+  document.getElementById('inGridBtn').classList.toggle('blue', !instGridOn);
+  if(instGridOn) renderInstGrid();
+}
+function renderInstGrid(){
+  if(!instGridOn) return;
+  const q=(document.getElementById('inQ').value||'').toLowerCase();
+  const cols=[['name','교육기관명','220'],['biz','사업자등록번호','130'],['addr','주소','200'],['tel','연락처','120'],['home','홈페이지','200'],['memo','비고','140']];
+  window._inCols=cols;
+  const idxList = INSTS.map((x,i)=>i).filter(i=>{ if(!q) return true; const x=INSTS[i]; return (x.name||'').toLowerCase().includes(q)||(x.addr||'').toLowerCase().includes(q); });
+  window._inIdxList=idxList;
+  let html='<thead><tr><th class="rm"></th><th class="cellnum">#</th>'+cols.map(c=>`<th style="min-width:${c[2]}px">${c[1]}</th>`).join('')+'</tr></thead><tbody>';
+  html+=idxList.map((i,vis)=>{
+    const x=INSTS[i];
+    return `<tr>
+      <td class="rm"><button onclick="instGridDel(${i})" title="삭제">✕</button></td>
+      <td class="cellnum">${vis+1}</td>`+
+      cols.map((c,ci)=>`<td><input value="${esc(x[c[0]]||'')}" data-r="${vis}" data-c="${ci}" oninput="INSTS[${i}]['${c[0]}']=this.value" onpaste="instGridPaste(event,${vis},${ci})" ${c[0]==='name'?'style="font-weight:600"':''}></td>`).join('')+
+    `</tr>`;
+  }).join('');
+  html+='</tbody>';
+  const g=document.getElementById('inGrid'); g.innerHTML=html;
+}
+function instGridPaste(ev, rowVis, colStart){
+  const text=(ev.clipboardData||window.clipboardData).getData('text');
+  if(!text || (!text.includes('\t') && !text.includes('\n'))) return; // 단일 셀은 기본 붙여넣기
+  ev.preventDefault();
+  const cols=window._inCols, idxList=window._inIdxList;
+  const grid=text.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(r=>r.split('\t'));
+  grid.forEach((cells,ri)=>{
+    const vis=rowVis+ri;
+    // 부족한 행은 새로 추가
+    while(vis>=idxList.length){ INSTS.push({name:'',biz:'',addr:'',tel:'',home:'',memo:''}); idxList.push(INSTS.length-1); }
+    const gi=idxList[vis];
+    cells.forEach((val,ci)=>{ const col=cols[colStart+ci]; if(col) INSTS[gi][col[0]]=val.trim(); });
+  });
+  renderInstGrid();
+  toast('✓ '+grid.length+'행이 붙여넣어졌습니다. 확인 후 「전체 저장」하세요');
+}
+function instGridAddRow(){
+  INSTS.unshift({name:'', biz:'', addr:'', tel:'', home:'', memo:''});
+  renderInstGrid();
+  setTimeout(()=>{ const first=document.querySelector('#inGrid tbody tr:first-child input'); if(first) first.focus(); },0);
+}
+function instGridDel(i){
+  const nm=INSTS[i]?.name||'(빈 행)';
+  if(!confirm(`'${nm}' 행을 삭제할까요?`)) return;
+  INSTS.splice(i,1); renderInstGrid();
+}
+async function saveInstGrid(){
+  // 빈 이름 정리 + 중복 이름 경고
+  const cleaned=INSTS.filter(x=>(x.name||'').trim());
+  const names=cleaned.map(x=>x.name.trim());
+  const dup=names.find((n,i)=>names.indexOf(n)!==i);
+  if(dup){ if(!confirm(`중복된 기관명이 있습니다: '${dup}'\n그래도 저장할까요? (중복은 하나로 합쳐질 수 있습니다)`)) return; }
+  INSTS=cleaned.map(x=>({...x, name:x.name.trim()}));
+  await saveInsts();
+  log('교육기관 일괄 저장', INSTS.length+'개');
+  renderInstGrid(); renderInst();
+  toast('✓ 교육기관 '+INSTS.length+'개가 저장되었습니다');
+}
+
 function instCourseCounts(){ return count(visCat(), c=>c.i); }
 function instHome(name){ const x=INSTS.find(i=>i.name===name); return x&&x.home?x.home:''; }
 function renderInst(){
@@ -1809,6 +2083,100 @@ async function bulkImport(ev){
 
 /* ============ COMPETENCY MGMT ============ */
 function cpCourseCount(name){ return visCat().filter(c=>(c.cp||[]).includes(name)).length; }
+let compGridOn=false;
+let cpFilteredIdx=[];  // 현재 필터에 해당하는 COMPS 인덱스
+function toggleCompGrid(){
+  compGridOn=!compGridOn;
+  document.getElementById('cpGridWrap').style.display=compGridOn?'block':'none';
+  document.getElementById('cpTableWrap').style.display=compGridOn?'none':'block';
+  document.getElementById('cpGridBtn').classList.toggle('blue', !compGridOn);
+  if(compGridOn) renderCompGrid();
+}
+function cpCurrentFilterIdx(){
+  const q=(document.getElementById('cpQ').value||'').toLowerCase();
+  const selJG=document.getElementById('cpFilterJG').value, selSR=document.getElementById('cpFilterSR').value, selJB=document.getElementById('cpFilterJB').value;
+  return COMPS.map((c,i)=>i).filter(i=>{
+    const c=COMPS[i];
+    if(q && !c.name.toLowerCase().includes(q)) return false;
+    if(selJG && c.jg!==selJG) return false;
+    if(selSR && c.sr!==selSR) return false;
+    if(selJB && c.jb!==selJB) return false;
+    return true;
+  });
+}
+function renderCompGrid(){
+  if(!compGridOn) return;
+  cpFilteredIdx=cpCurrentFilterIdx();
+  window._cpIdxList=cpFilteredIdx;
+  const jgs=Object.keys(TAX).sort((a,b)=>a.localeCompare(b,'ko'));
+  const rowsIdx=cpFilteredIdx.slice(0,600);
+  let html='<thead><tr><th class="rm"></th><th class="cellnum">#</th><th style="min-width:130px">직계</th><th style="min-width:150px">직렬</th><th style="min-width:190px">직무</th><th style="min-width:280px">역량명</th><th style="min-width:80px">레벨</th></tr></thead><tbody>';
+  html+=rowsIdx.map((i,vis)=>{
+    const c=COMPS[i];
+    const srs=c.jg&&TAX[c.jg]?Object.keys(TAX[c.jg]).sort((a,b)=>a.localeCompare(b,'ko')):[];
+    const jbs=(c.jg&&c.sr&&TAX[c.jg]&&TAX[c.jg][c.sr])?TAX[c.jg][c.sr].slice().sort((a,b)=>a.localeCompare(b,'ko')):[];
+    return `<tr>
+      <td class="rm"><button onclick="compGridDel(${i})">✕</button></td>
+      <td class="cellnum">${vis+1}</td>
+      <td><select onchange="compGridSet(${i},'jg',this.value)" onpaste="compGridPaste(event,${vis},0)"><option value="">-</option>${jgs.map(j=>`<option ${c.jg===j?'selected':''}>${esc(j)}</option>`).join('')}</select></td>
+      <td><select onchange="compGridSet(${i},'sr',this.value)" ${c.jg?'':'disabled'}><option value="">-</option>${srs.map(s=>`<option ${c.sr===s?'selected':''}>${esc(s)}</option>`).join('')}</select></td>
+      <td><select onchange="compGridSet(${i},'jb',this.value)" ${c.sr?'':'disabled'}><option value="">-</option>${jbs.map(j=>`<option ${c.jb===j?'selected':''}>${esc(j)}</option>`).join('')}</select></td>
+      <td><input value="${esc(c.name||'')}" oninput="COMPS[${i}].name=this.value" onpaste="compGridPaste(event,${vis},3)"></td>
+      <td><select onchange="COMPS[${i}].lv=this.value?parseInt(this.value):''"><option value="">-</option>${[1,2,3,4,5].map(l=>`<option value="${l}" ${String(c.lv)===String(l)?'selected':''}>Lv${l}</option>`).join('')}</select></td>
+    </tr>`;
+  }).join('');
+  html+='</tbody>';
+  document.getElementById('cpGrid').innerHTML=html;
+}
+function compGridPaste(ev, rowVis, colStart){
+  const text=(ev.clipboardData||window.clipboardData).getData('text');
+  if(!text || (!text.includes('\t') && !text.includes('\n'))) return;
+  ev.preventDefault();
+  const keys=['jg','sr','jb','name','lv'];
+  const idxList=window._cpIdxList;
+  const grid=text.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(r=>r.split('\t'));
+  const selJG=document.getElementById('cpFilterJG').value, selSR=document.getElementById('cpFilterSR').value, selJB=document.getElementById('cpFilterJB').value;
+  grid.forEach((cells,ri)=>{
+    const vis=rowVis+ri;
+    while(vis>=idxList.length){ COMPS.push({jg:selJG||'',sr:selSR||'',jb:selJB||'',lv:'',name:''}); idxList.push(COMPS.length-1); }
+    const gi=idxList[vis];
+    cells.forEach((val,ci)=>{
+      const key=keys[colStart+ci]; if(!key) return;
+      val=val.trim();
+      if(key==='lv'){ const n=parseInt(String(val).replace(/[^0-9]/g,'')); COMPS[gi].lv=(n>=1&&n<=5)?n:''; }
+      else COMPS[gi][key]=val;
+    });
+  });
+  renderCompGrid();
+  toast('✓ '+grid.length+'행이 붙여넣어졌습니다. 직계·직렬·직무는 표준 명칭과 일치해야 저장됩니다');
+}
+function compGridSet(i,field,val){
+  COMPS[i][field]=val;
+  if(field==='jg'){ COMPS[i].sr=''; COMPS[i].jb=''; }
+  else if(field==='sr'){ COMPS[i].jb=''; }
+  renderCompGrid();
+}
+function compGridAddRow(){
+  const selJG=document.getElementById('cpFilterJG').value, selSR=document.getElementById('cpFilterSR').value, selJB=document.getElementById('cpFilterJB').value;
+  COMPS.unshift({jg:selJG||'', sr:selSR||'', jb:selJB||'', lv:'', name:''});
+  renderCompGrid();
+  setTimeout(()=>{ const inp=document.querySelector('#cpGrid tbody tr:first-child input'); if(inp) inp.focus(); },0);
+}
+function compGridDel(i){
+  const nm=COMPS[i]?.name||'(빈 행)';
+  if(!confirm(`'${nm}' 역량 행을 삭제할까요?`)) return;
+  COMPS.splice(i,1); renderCompGrid();
+}
+async function saveCompGrid(){
+  const cleaned=COMPS.filter(c=>(c.name||'').trim() && c.jg && c.sr);
+  const dropped=COMPS.length-cleaned.length;
+  COMPS=cleaned.map(c=>({...c, name:c.name.trim(), lv:c.lv===''?'':parseInt(c.lv)}));
+  await saveComps();
+  log('역량 일괄 저장', COMPS.length+'개');
+  renderCompGrid(); renderComp();
+  toast('✓ 역량 '+COMPS.length+'개가 저장되었습니다'+(dropped>0?` (직계·직렬·역량명 미입력 ${dropped}행 제외)`:''));
+}
+
 function cpJGchange(){
   const jg=document.getElementById('cpFilterJG').value;
   const sr=document.getElementById('cpFilterSR');
@@ -1871,6 +2239,7 @@ function renderComp(){
   document.getElementById('stTag4').innerHTML = storageOK
     ? '<span class="storage-tag st-on">● 클라우드 서버 연결됨 — 자동 저장</span>'
     : '<span class="storage-tag st-off">● 서버 미연결</span>';
+  if(compGridOn) renderCompGrid();
 }
 let editingComp=null;
 function openCompForm(gi){
