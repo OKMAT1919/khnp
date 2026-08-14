@@ -144,6 +144,16 @@ aside{position:sticky;top:118px;max-height:calc(100vh - 132px);overflow-y:auto;d
 .snaprow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:#fff}
 .snaprow:hover{border-color:var(--khnp)}
 .sbtn.green{background:var(--green,#0E7A4B);color:#fff;border-color:transparent}
+#wakeOverlay,#busyOverlay{position:fixed;inset:0;z-index:9999;background:rgba(11,37,69,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center}
+.wakebox{background:#fff;border-radius:16px;padding:34px 40px;max-width:420px;text-align:center;box-shadow:0 20px 60px rgba(11,37,69,.3)}
+.wakespin{width:44px;height:44px;margin:0 auto 18px;border:4px solid #E4E9F0;border-top-color:var(--khnp,#0B5BD3);border-radius:50%;animation:wakespin 0.9s linear infinite}
+@keyframes wakespin{to{transform:rotate(360deg)}}
+.waketitle{font-size:17px;font-weight:700;color:var(--ink,#0B2545);margin-bottom:8px}
+.wakedesc{font-size:13px;color:var(--mute,#7A879C);line-height:1.6;margin-bottom:16px}
+.wakebar{height:6px;background:#EDF1F6;border-radius:4px;overflow:hidden;margin-bottom:12px}
+.wakebar-fill{height:100%;width:0;background:var(--khnp,#0B5BD3);border-radius:4px;transition:width .4s ease}
+.wakeretry{font-size:12px;color:var(--mute,#7A879C)}
+.wakeretry button{margin-top:6px;padding:6px 16px;border:1px solid var(--line,#C9D3E0);border-radius:8px;background:#fff;cursor:pointer;font-size:12px}
 .gridbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .gridhint{font-size:11px;color:var(--mute)}
 .gridscroll{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:10px}
@@ -775,6 +785,23 @@ tr:hover td{background:#FAFBFD}
 </div>
 
 <div class="toast" id="toast"></div>
+<div id="wakeOverlay" style="display:none">
+  <div class="wakebox">
+    <div class="wakespin"></div>
+    <div class="waketitle">서버를 깨우는 중입니다…</div>
+    <div class="wakedesc" id="wakeDesc">클라우드 서버가 절전 상태에서 깨어나고 있습니다.<br>잠시만 기다려 주세요 (보통 30초~1분).</div>
+    <div class="wakebar"><div class="wakebar-fill" id="wakeBarFill"></div></div>
+    <div class="wakeretry" id="wakeRetry"></div>
+  </div>
+</div>
+<div id="busyOverlay" style="display:none">
+  <div class="wakebox">
+    <div class="wakespin"></div>
+    <div class="waketitle" id="busyTitle">처리 중입니다…</div>
+    <div class="wakedesc" id="busyDesc">잠시만 기다려 주세요.</div>
+    <div class="wakebar"><div class="wakebar-fill" id="busyBarFill"></div></div>
+  </div>
+</div>
 
 <script>
 /* ============ DATA (내장 = 서버 연결 실패 시 폴백) ============ */
@@ -810,31 +837,88 @@ async function api(path, opt){
   return ct.includes('json') ? r.json() : r.text();
 }
 
-// 초기 로드: 서버에서 모든 데이터 수신
-async function initStorage(){
-  try{
-    const b = await api('/api/sync/bootstrap');
-    CATALOG_RAW = b.catalog || [];
-    CAT = CATALOG_RAW.map(c=>({...c}));
-    if(b.tax && Object.keys(b.tax).length) TAX = b.tax;
-    if(b.ktree && Object.keys(b.ktree).length) KTREE = b.ktree;
-    if(Array.isArray(b.comps)) COMPS = b.comps;
-    if(Array.isArray(b.insts)) INSTS = b.insts;
-    if(Array.isArray(b.demands)) DEMANDS = b.demands;
-    if(Array.isArray(b.log)) LOG = b.log;
-    if(Array.isArray(b.depts) && b.depts.length){
-      const ds=document.getElementById('deptSel'), cs=document.getElementById('cartDept');
-      if(ds&&cs){ ds.innerHTML = cs.innerHTML = b.depts.map(d=>`<option>${d}</option>`).join(''); }
-    }
-    storageOK = true;
-  }catch(e){
-    console.error('서버 연결 실패, 내장 데이터로 표시:', e.message);
-    storageOK = false;
-    CATALOG_RAW = (typeof EMBEDDED_CATALOG!=='undefined')?EMBEDDED_CATALOG:[];
-    CAT = CATALOG_RAW.map(c=>({...c}));
-    toast('⚠ 서버에 연결하지 못했습니다. 화면은 열리지만 저장은 되지 않습니다.');
+// bootstrap 1회 시도 (오버레이/폴백 없이 데이터만 적재)
+async function loadBootstrapOnce(){
+  const b = await api('/api/sync/bootstrap');
+  CATALOG_RAW = b.catalog || [];
+  CAT = CATALOG_RAW.map(c=>({...c}));
+  if(b.tax && Object.keys(b.tax).length) TAX = b.tax;
+  if(b.ktree && Object.keys(b.ktree).length) KTREE = b.ktree;
+  if(Array.isArray(b.comps)) COMPS = b.comps;
+  if(Array.isArray(b.insts)) INSTS = b.insts;
+  if(Array.isArray(b.demands)) DEMANDS = b.demands;
+  if(Array.isArray(b.log)) LOG = b.log;
+  if(Array.isArray(b.depts) && b.depts.length){
+    const ds=document.getElementById('deptSel'), cs=document.getElementById('cartDept');
+    if(ds&&cs){ ds.innerHTML = cs.innerHTML = b.depts.map(d=>`<option>${d}</option>`).join(''); }
   }
+  storageOK = true;
 }
+function wakeShow(show){ document.getElementById('wakeOverlay').style.display = show?'flex':'none'; }
+function wakeProgress(pct, desc){
+  const f=document.getElementById('wakeBarFill'); if(f) f.style.width=Math.min(100,pct)+'%';
+  if(desc){ const d=document.getElementById('wakeDesc'); if(d) d.innerHTML=desc; }
+}
+// 저장/처리 진행 표시
+function busyShow(title, desc){
+  document.getElementById('busyTitle').textContent = title||'처리 중입니다…';
+  document.getElementById('busyDesc').innerHTML = desc||'잠시만 기다려 주세요.';
+  document.getElementById('busyBarFill').style.width='0%';
+  document.getElementById('busyOverlay').style.display='flex';
+}
+function busyProgress(pct, desc){
+  document.getElementById('busyBarFill').style.width=Math.min(100,Math.max(0,pct))+'%';
+  if(desc) document.getElementById('busyDesc').innerHTML=desc;
+}
+function busyHide(){ document.getElementById('busyOverlay').style.display='none'; }
+
+// 초기 로드: 서버가 절전이면 깨우며 자동 재시도
+async function initStorage(){
+  // 1차: 빠른 시도 (서버가 이미 깨어 있으면 즉시 성공)
+  try{ await loadBootstrapOnce(); return; }
+  catch(e){ /* 잠들어 있을 가능성 → 깨우기 모드 진입 */ }
+
+  wakeShow(true);
+  const MAX=12;            // 최대 재시도 횟수
+  const GAP=6000;          // 재시도 간격(ms) — 총 최대 ~72초
+  for(let i=1;i<=MAX;i++){
+    wakeProgress(Math.round(i/MAX*100),
+      `클라우드 서버가 절전 상태에서 깨어나고 있습니다.<br>연결 시도 중… (${i}/${MAX})`);
+    try{
+      await loadBootstrapOnce();
+      wakeProgress(100, '연결됐습니다. 데이터를 불러옵니다…');
+      await new Promise(r=>setTimeout(r,300));
+      wakeShow(false);
+      // 화면 갱신
+      try{ render(); renderAdmin&&renderAdmin(); }catch(_){}
+      toast('✓ 서버에 연결되었습니다');
+      return;
+    }catch(e){
+      if(i<MAX) await new Promise(r=>setTimeout(r,GAP));
+    }
+  }
+  // 모두 실패 → 수동 재시도 안내 + 내장 데이터 폴백
+  wakeProgress(100,'서버가 아직 응답하지 않습니다.');
+  const box=document.getElementById('wakeRetry');
+  if(box) box.innerHTML='서버 연결에 시간이 더 걸리고 있습니다.<br><button onclick="retryWake()">다시 시도</button> <button onclick="wakeDismiss()">닫고 둘러보기</button>';
+  storageOK=false;
+  CATALOG_RAW = (typeof EMBEDDED_CATALOG!=='undefined')?EMBEDDED_CATALOG:[];
+  CAT = CATALOG_RAW.map(c=>({...c}));
+}
+async function retryWake(){
+  const box=document.getElementById('wakeRetry'); if(box) box.innerHTML='';
+  wakeProgress(0,'다시 연결하는 중…');
+  const MAX=12, GAP=6000;
+  for(let i=1;i<=MAX;i++){
+    wakeProgress(Math.round(i/MAX*100), `연결 시도 중… (${i}/${MAX})`);
+    try{ await loadBootstrapOnce(); wakeShow(false); try{render();renderAdmin&&renderAdmin();}catch(_){}
+      toast('✓ 서버에 연결되었습니다'); return; }
+    catch(e){ if(i<MAX) await new Promise(r=>setTimeout(r,GAP)); }
+  }
+  const box2=document.getElementById('wakeRetry');
+  if(box2) box2.innerHTML='아직도 연결되지 않습니다.<br><button onclick="retryWake()">다시 시도</button> <button onclick="wakeDismiss()">닫고 둘러보기</button>';
+}
+function wakeDismiss(){ wakeShow(false); toast('⚠ 서버 미연결 상태입니다. 저장하려면 새로고침해 다시 연결하세요.'); }
 
 // 과정 저장/수정 (서버 반영 후 로컬 갱신)
 async function apiSaveCourse(courseObj, isNew){
@@ -1431,8 +1515,11 @@ async function saveForm(){
   if(editingId){
     const c = CAT.find(x=>x.id===editingId);
     Object.assign(c, data); c._hidden = !published;
+    busyShow('과정을 저장하는 중입니다…', '서버에 변경 내용을 반영하고 있습니다.');
+    busyProgress(40);
     try{ await apiSaveCourse({...data, id:editingId, published}, false); }
-    catch(e){ toast('저장 실패: 서버 연결을 확인하세요'); return; }
+    catch(e){ busyHide(); toast('저장 실패: 서버 연결을 확인하세요'); return; }
+    busyProgress(100); busyHide();
     log('과정 수정', n);
     toast('✓ 과정 정보가 수정되어 스토어에 반영되었습니다');
   } else {
@@ -1443,8 +1530,11 @@ async function saveForm(){
     }
     const id = 'NEW_'+Date.now();
     const c = {id, ...data, grp:id, _hidden:!published};
+    busyShow('과정을 등록하는 중입니다…', '서버에 새 과정을 저장하고 있습니다.');
+    busyProgress(40);
     try{ await apiSaveCourse({...data, id, grp:id, published}, true); }
-    catch(e){ toast('등록 실패: 서버 연결을 확인하세요'); return; }
+    catch(e){ busyHide(); toast('등록 실패: 서버 연결을 확인하세요'); return; }
+    busyProgress(100); busyHide();
     CAT.push(c);
     log('과정 등록', n);
     toast('✓ 신규 과정이 등록되어 스토어에 게시되었습니다');
@@ -1694,19 +1784,25 @@ async function saveCourseGrid(){
   const ids=[...acDirty]; if(!ids.length){ toast('변경된 과정이 없습니다'); return; }
   const targets=ids.map(id=>CAT.find(c=>c.id===id)).filter(c=>c && (c.n||'').trim());
   if(!targets.length){ toast('저장할 과정이 없습니다 (과정명 필요)'); return; }
-  let ok=0, fail=0;
-  toast('저장 중… '+targets.length+'건');
-  for(const c of targets){
-    // map의 첫 줄 레벨을 대표 lv로
-    const p=acPrimary(c); if(p&&p[3]!==''&&p[3]!=null) c.lv=p[3];
-    const payload={...c, published:!c._hidden};
-    const isNew=String(c.id).startsWith('NEW_');
-    try{ await apiSaveCourse(payload, isNew); ok++; }catch(e){ fail++; }
-  }
-  acDirty=new Set();
-  log('과정 격자 저장', ok+'건'+(fail?(' / 실패 '+fail):''));
-  renderCourseGrid(); renderAdmin();
-  toast('✓ '+ok+'건 저장'+(fail?(' · '+fail+'건 실패(서버 확인)'):''));
+  // 대표 레벨 반영
+  targets.forEach(c=>{ const p=acPrimary(c); if(p&&p[3]!==''&&p[3]!=null) c.lv=p[3]; });
+  const items=targets.map(c=>({...c, published:!c._hidden}));
+  let ok=0;
+  busyShow('과정을 저장하는 중입니다…', `변경된 ${items.length}건을 서버에 저장하고 있습니다.`);
+  try{
+    const CHUNK=300;
+    for(let i=0;i<items.length;i+=CHUNK){
+      const part=items.slice(i,i+CHUNK);
+      await api('/api/courses/bulk', {method:'POST', body:JSON.stringify({items:part})});
+      ok+=part.length;
+      busyProgress(Math.round(ok/items.length*100), `과정 저장 중… ${ok} / ${items.length}건`);
+    }
+    busyHide();
+    acDirty=new Set();
+    log('과정 격자 저장', ok+'건');
+    renderCourseGrid(); renderAdmin();
+    toast('✓ '+ok+'건이 저장되었습니다');
+  }catch(e){ busyHide(); toast('저장 실패: 서버 연결을 확인하세요 (일부만 저장됐을 수 있음)'); renderCourseGrid(); renderAdmin(); }
 }
 
 function renderAdmin(){
@@ -2241,9 +2337,20 @@ async function bulkImport(ev){
       added++;
     });
     try{
-      if(newCourses.length) await api('/api/courses/bulk', {method:'POST', body:JSON.stringify({items:newCourses})});
+      if(newCourses.length){
+        busyShow('과정을 등록하는 중입니다…', `총 ${newCourses.length}건을 서버에 저장하고 있습니다.`);
+        const CHUNK=300;
+        for(let i=0;i<newCourses.length;i+=CHUNK){
+          const part=newCourses.slice(i,i+CHUNK);
+          await api('/api/courses/bulk', {method:'POST', body:JSON.stringify({items:part})});
+          const done=Math.min(i+CHUNK,newCourses.length);
+          busyProgress(Math.round(done/newCourses.length*100), `과정 저장 중… ${done} / ${newCourses.length}건`);
+        }
+        busyProgress(100, '기준정보(직무체계·역량·교육기관)를 반영하는 중…');
+      }
       await saveInsts(); await saveComps(); await saveKtree(); if(updatedTax) await saveTax();
-    }catch(e){ toast('일괄등록 서버 반영 실패: 연결을 확인하세요'); }
+      busyHide();
+    }catch(e){ busyHide(); toast('일괄등록 서버 반영 실패: 연결을 확인하세요'); }
     log('Excel 일괄등록', added+'개 과정 ('+f.name+')');
     render(); renderAdmin(); renderInst(); renderTax(); renderComp(); renderFrame();
     toast('✓ '+added+'개 과정을 일괄 등록했습니다 — 스토어에 게시되었습니다');
