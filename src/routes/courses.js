@@ -74,6 +74,16 @@ async function upsertCourse(body, isNew) {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
+    const id = await upsertCourseWith(client, body);
+    await client.query('COMMIT');
+    await logChange(isNew ? '과정 등록' : '과정 수정', body.n, 'tb_course', body.user);
+    return id;
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+// 실제 upsert 로직 (전달받은 client/트랜잭션 안에서 실행) — 일괄처리에서 재사용
+async function upsertCourseWith(client, body) {
     const id = body.id || ('NEW_' + Date.now());
     const instId = body.i
       ? (await client.query('SELECT institution_id FROM tb_institution WHERE inst_nm=$1', [body.i])).rows[0]?.institution_id || null
@@ -97,33 +107,27 @@ async function upsertCourse(body, isNew) {
         edu_hours=EXCLUDED.edu_hours, edu_method=EXCLUDED.edu_method, edu_place=EXCLUDED.edu_place,
         edu_level=EXCLUDED.edu_level, course_link=EXCLUDED.course_link, fw_kb1=EXCLUDED.fw_kb1,
         fw_kb2=EXCLUDED.fw_kb2, fw_kb3=EXCLUDED.fw_kb3, is_new=EXCLUDED.is_new, is_required=EXCLUDED.is_required,
-        is_recommend=EXCLUDED.is_recommend, is_published=EXCLUDED.is_published,
-        plan_year=EXCLUDED.plan_year, course_group=EXCLUDED.course_group, updated_at=now()
-    `, vals);
-
-    // 태그·매핑 재구성
+        is_recommend=EXCLUDED.is_recommend, is_published=EXCLUDED.is_published, plan_year=EXCLUDED.plan_year,
+        course_group=EXCLUDED.course_group, updated_at=now()`, vals);
+    // map/tags/comp 재구성
     await client.query('DELETE FROM tb_course_tag WHERE course_id=$1', [id]);
     for (const t of (body.tags || [])) await client.query('INSERT INTO tb_course_tag(course_id,tag) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, t]);
+    await client.query('DELETE FROM tb_course_comp WHERE map_id IN (SELECT map_id FROM tb_course_map WHERE course_id=$1)', [id]);
     await client.query('DELETE FROM tb_course_map WHERE course_id=$1', [id]);
     for (const m of (body.map || [])) {
       const [jg, sr, jb, lv, caps] = [m[0] || '', m[1] || '', m[2] || '', m[3] === '' ? null : m[3], m[4] || []];
-      const mr = await client.query(
+      const mapRow = await client.query(
         'INSERT INTO tb_course_map(course_id,jikgye,jikryeol,jikmu,edu_level) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING map_id',
         [id, jg, sr, jb, lv]);
-      const mapId = mr.rows[0]?.map_id;
+      const mapId = mapRow.rows[0]?.map_id;
       if (mapId) for (const cp of caps) {
         await client.query('INSERT INTO tb_course_comp(map_id,comp_nm) VALUES ($1,$2) ON CONFLICT DO NOTHING', [mapId, cp]);
-        // 역량 마스터에도 정렬 반영
-        await client.query(
+        if (jg && sr && jb) await client.query(
           'INSERT INTO tb_competency(jikgye,jikryeol,jikmu,comp_level,comp_nm) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
           [jg, sr, jb, lv, cp]);
       }
     }
-    await client.query('COMMIT');
-    await logChange(isNew ? '과정 등록' : '과정 수정', body.n, 'tb_course', body.user);
     return id;
-  } catch (e) { await client.query('ROLLBACK'); throw e; }
-  finally { client.release(); }
 }
 
 router.post('/', async (req, res, next) => { try { const id = await upsertCourse(req.body, true); res.status(201).json({ id }); } catch (e) { next(e); } });
@@ -138,13 +142,19 @@ router.delete('/:id', async (req, res, next) => {
   catch (e) { next(e); }
 });
 
-// 엑셀 일괄 등록 (프론트에서 파싱한 배열 수신)
+// 엑셀 일괄 등록 (프론트에서 파싱한 배열 수신) — 단일 트랜잭션으로 빠르게 처리
 router.post('/bulk', async (req, res, next) => {
+  const items = req.body.items || [];
+  const client = await db.getClient();
   try {
-    const items = req.body.items || [];
-    let n = 0; for (const it of items) { await upsertCourse(it, true); n++; }
+    await client.query('BEGIN');
+    let n = 0;
+    for (const it of items) { await upsertCourseWith(client, it); n++; }
+    await client.query('COMMIT');
+    await logChange('과정 일괄등록', n + '건', 'tb_course');
     res.json({ inserted: n });
-  } catch (e) { next(e); }
+  } catch (e) { await client.query('ROLLBACK'); next(e); }
+  finally { client.release(); }
 });
 
 module.exports = router;
