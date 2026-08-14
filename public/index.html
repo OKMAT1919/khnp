@@ -2129,8 +2129,15 @@ async function bulkImport(ev){
     const wb = XLSX.read(buf, {type:'array'});
     // prefer sheet named 교육과정_일괄등록, else first
     const sName = wb.SheetNames.find(n=>n.includes('일괄'))||wb.SheetNames[0];
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sName], {defval:''});
-    if(!rows.length){ toast('데이터가 없습니다'); return; }
+    const sheet = wb.Sheets[sName];
+    // 헤더 행 자동 탐지: '교육과정명'(또는 과정명/교육명)이 있는 행을 헤더로 (제목 행 건너뜀)
+    const aoa = XLSX.utils.sheet_to_json(sheet,{header:1,defval:''});
+    let hdrRow=0;
+    for(let i=0;i<Math.min(aoa.length,6);i++){ if(aoa[i].some(c=>{const s=String(c).trim();return s==='교육과정명'||s==='과정명'||s==='교육명';})){ hdrRow=i; break; } }
+    let rows = XLSX.utils.sheet_to_json(sheet, {defval:'', range:hdrRow});
+    // 안내/예시 행 제거: 과정명이 '★필수'로 시작하거나 '[예시]'로 시작하면 건너뜀
+    rows = rows.filter(r=>{ const n=String(r['교육과정명']||r['과정명']||r['교육명']||'').trim(); return n && !n.startsWith('[예시]') && !n.startsWith('★') && !n.includes('필수  '); });
+    if(!rows.length){ toast('데이터가 없습니다 (헤더 행과 과정명을 확인하세요)'); return; }
     const pick = (r,keys)=>{ for(const k of keys){ if(r[k]!=null&&String(r[k]).trim()!=='') return String(r[k]).trim(); } return ''; };
     let added=0, updatedTax=false;
     const stamp = Date.now();
