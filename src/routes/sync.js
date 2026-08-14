@@ -93,10 +93,14 @@ async function replaceInsts(rows) {
     await c.query('COMMIT'); } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
 
-router.put('/taxonomy',     async (req, res, next) => { try { await replaceTaxonomy(req.body.tree || {}); res.json({ ok: true }); } catch (e) { next(e); } });
-router.put('/framework',    async (req, res, next) => { try { await replaceFramework(req.body.tree || {}); res.json({ ok: true }); } catch (e) { next(e); } });
-router.put('/competencies', async (req, res, next) => { try { await replaceComps(req.body.rows || []); res.json({ ok: true }); } catch (e) { next(e); } });
-router.put('/institutions', async (req, res, next) => { try { await replaceInsts(req.body.rows || []); res.json({ ok: true }); } catch (e) { next(e); } });
+// 큰 변경(컬렉션 통째 교체) 전에 자동 스냅샷 — 실패해도 본 작업은 진행
+const { takeSnapshot } = require('./backup');
+async function autoSnap(reason) { try { await takeSnapshot(reason, 'auto'); } catch (e) { console.error('autoSnap fail:', e.message); } }
+
+router.put('/taxonomy',     async (req, res, next) => { try { await autoSnap('직무체계 저장 전'); await replaceTaxonomy(req.body.tree || {}); res.json({ ok: true }); } catch (e) { next(e); } });
+router.put('/framework',    async (req, res, next) => { try { await autoSnap('교육체계 저장 전'); await replaceFramework(req.body.tree || {}); res.json({ ok: true }); } catch (e) { next(e); } });
+router.put('/competencies', async (req, res, next) => { try { await autoSnap('역량 저장 전'); await replaceComps(req.body.rows || []); res.json({ ok: true }); } catch (e) { next(e); } });
+router.put('/institutions', async (req, res, next) => { try { await autoSnap('교육기관 저장 전'); await replaceInsts(req.body.rows || []); res.json({ ok: true }); } catch (e) { next(e); } });
 
 // 변경이력 1건 기록
 router.post('/log', async (req, res, next) => {
