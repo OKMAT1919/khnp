@@ -685,7 +685,7 @@ tr:hover td{background:#FAFBFD}
     <div id="snapList" style="max-height:52vh;overflow:auto"></div>
   </div>
 </div>
-<div class="modal" id="formModal"><div class="ov show" style="z-index:100" onclick="closeForm()"></div>
+<div class="modal" id="formModal"><div class="ov show" style="z-index:100" onclick="closeFormGuard()"></div>
   <div class="m-card">
     <div class="m-name" id="fmTitle" style="padding-top:22px">신규 과정 등록</div>
     <div class="form-grid">
@@ -738,7 +738,7 @@ tr:hover td{background:#FAFBFD}
 </div>
 
 <!-- institution form modal -->
-<div class="modal" id="instModal"><div class="ov show" style="z-index:100" onclick="closeInstForm()"></div>
+<div class="modal" id="instModal"><div class="ov show" style="z-index:100" onclick="closeInstGuard()"></div>
   <div class="m-card" style="max-width:560px">
     <div class="m-name" id="inTitle" style="padding-top:22px">교육기관 등록</div>
     <div class="form-grid">
@@ -757,7 +757,7 @@ tr:hover td{background:#FAFBFD}
 </div>
 
 <!-- competency form modal -->
-<div class="modal" id="compModal"><div class="ov show" style="z-index:100" onclick="closeCompForm()"></div>
+<div class="modal" id="compModal"><div class="ov show" style="z-index:100" onclick="closeCompGuard()"></div>
   <div class="m-card" style="max-width:600px">
     <div class="m-name" id="cpTitle" style="padding-top:22px">역량 등록</div>
     <div class="form-grid">
@@ -1386,6 +1386,7 @@ function fmHashKey(ev){
 function fmRemoveHash(i){ fmCustomHashes.splice(i,1); fmRenderCustomHashes(); }
 
 function closeForm(){ document.getElementById('formModal').classList.remove('show'); editingId=null; }
+function closeFormGuard(){ if(confirm('입력한 내용이 저장되지 않고 닫힙니다. 정말 닫을까요?\n\n저장하려면 [취소]를 누르고 「저장하고 스토어에 반영」 버튼을 사용하세요.')) closeForm(); }
 async function saveForm(){
   const n = document.getElementById('fm_n').value.trim();
   const o1 = document.getElementById('fm_o1').value.trim();
@@ -2106,6 +2107,7 @@ function openInstForm(ri){
   document.getElementById('instModal').classList.add('show');
 }
 function closeInstForm(){ document.getElementById('instModal').classList.remove('show'); editingInst=null; }
+function closeInstGuard(){ if(confirm('입력한 내용이 저장되지 않고 닫힙니다. 정말 닫을까요?')) closeInstForm(); }
 async function saveInstForm(){
   const name = document.getElementById('in_name').value.trim();
   if(!name){ toast('교육기관명을 입력하세요'); return; }
@@ -2436,6 +2438,7 @@ function cfFillJB(pre){
   if(pre&&jbs.includes(pre)) sel.value=pre;
 }
 function closeCompForm(){ document.getElementById('compModal').classList.remove('show'); editingComp=null; }
+function closeCompGuard(){ if(confirm('입력한 내용이 저장되지 않고 닫힙니다. 정말 닫을까요?')) closeCompForm(); }
 async function saveCompForm(){
   const jg=document.getElementById('cf_jg').value, sr=document.getElementById('cf_sr').value, jb=document.getElementById('cf_jb').value;
   const lv=document.getElementById('cf_lv').value, name=document.getElementById('cf_name').value.trim();
@@ -2671,7 +2674,16 @@ function showTab(t){
   if(t==='admin') renderAdmin();
 }
 document.getElementById('q').addEventListener('input', e=>{ F.q=e.target.value; const s=document.getElementById('qStore'); if(s)s.value=e.target.value; render(); });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeAll(); closeModal(); closeForm(); closeInstForm(); closeCompForm(); } });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){
+  // 편집 폼이 열려 있으면 확인 후 닫기 (실수 방지). 그 외 읽기 모달은 바로 닫기.
+  const formOpen=document.getElementById('formModal').classList.contains('show');
+  const instOpen=document.getElementById('instModal').classList.contains('show');
+  const compOpen=document.getElementById('compModal').classList.contains('show');
+  if(formOpen){ closeFormGuard(); return; }
+  if(instOpen){ closeInstGuard(); return; }
+  if(compOpen){ closeCompGuard(); return; }
+  closeAll(); closeModal(); closeSnapshots&&closeSnapshots();
+} });
 
 (async function(){
   const ds = document.getElementById('deptSel'), cs = document.getElementById('cartDept');
