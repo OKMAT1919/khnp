@@ -141,6 +141,9 @@ aside{position:sticky;top:118px;max-height:calc(100vh - 132px);overflow-y:auto;d
 .storesearch:focus{border-color:var(--khnp);box-shadow:0 0 0 3px var(--khnp-soft)}
 .editgrid .unaligned{background:#FFF4E5!important;box-shadow:inset 0 0 0 1.5px #F08A00}
 .editgrid .unaligned:focus{background:#FFF4E5!important}
+.snaprow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:#fff}
+.snaprow:hover{border-color:var(--khnp)}
+.sbtn.green{background:var(--green,#0E7A4B);color:#fff;border-color:transparent}
 .gridbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .gridhint{font-size:11px;color:var(--mute)}
 .gridscroll{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:10px}
@@ -605,6 +608,8 @@ tr:hover td{background:#FAFBFD}
         <button class="sbtn" onclick="exportBackup()">전체 백업(JSON)</button>
         <button class="sbtn" onclick="document.getElementById('impFile').click()">백업 불러오기</button>
         <input type="file" id="impFile" accept=".json" style="display:none" onchange="importBackup(event)">
+        <button class="sbtn green" onclick="cloudBackupNow()">☁ 클라우드 백업</button>
+        <button class="sbtn" onclick="openSnapshots()">🕘 백업 이력·복원</button>
         <button class="sbtn blue" id="acGridBtn" onclick="toggleCourseGrid()">⊞ 엑셀형 편집</button>
       </span>
     </div>
@@ -673,6 +678,13 @@ tr:hover td{background:#FAFBFD}
 </div>
 
 <!-- registration form modal -->
+<div class="modal" id="snapModal"><div class="ov" onclick="closeSnapshots()"></div>
+  <div class="modal-card" style="max-width:640px">
+    <div class="modal-h"><b>☁ 클라우드 백업 이력 · 복원</b><button class="xbtn" onclick="closeSnapshots()">✕</button></div>
+    <div style="padding:4px 2px 10px;font-size:12px;color:var(--mute)">직무체계·역량·교육기관·교육체계를 저장하기 <b>직전에 자동으로</b> 백업됩니다. 최근 30개가 보관되며, 아무 시점으로 복원할 수 있습니다. 복원 직전 현재 상태도 자동 백업되어 안전합니다.</div>
+    <div id="snapList" style="max-height:52vh;overflow:auto"></div>
+  </div>
+</div>
 <div class="modal" id="formModal"><div class="ov show" style="z-index:100" onclick="closeForm()"></div>
   <div class="m-card">
     <div class="m-name" id="fmTitle" style="padding-top:22px">신규 과정 등록</div>
@@ -1753,6 +1765,41 @@ function exportBackup(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify({overrides:OVERRIDES, demands:DEMANDS, log:LOG, tax:TAX, insts:INSTS, comps:COMPS, ktree:KTREE},null,1)],{type:'application/json'}));
   a.download = 'khnp_platform_backup.json'; a.click(); toast('백업 파일을 내려받았습니다');
+}
+/* ── 클라우드 자동 백업(스냅샷) ── */
+async function cloudBackupNow(){
+  if(!storageOK){ toast('서버 미연결 — 클라우드 백업 불가'); return; }
+  try{ const r=await api('/api/backup',{method:'POST',body:JSON.stringify({reason:'수동 백업'})});
+    toast('✓ 클라우드 백업 완료 (과정 '+(r.course_cnt||0)+'건)'); }
+  catch(e){ toast('백업 실패: 서버 연결을 확인하세요'); }
+}
+async function openSnapshots(){
+  if(!storageOK){ toast('서버 미연결 — 백업 이력을 볼 수 없습니다'); return; }
+  document.getElementById('snapModal').classList.add('show');
+  const box=document.getElementById('snapList'); box.innerHTML='<div style="padding:20px;text-align:center;color:var(--mute)">불러오는 중…</div>';
+  try{
+    const r=await api('/api/backup');
+    const list=r.snapshots||[];
+    if(!list.length){ box.innerHTML='<div style="padding:20px;text-align:center;color:var(--mute)">아직 백업이 없습니다. 저장 작업을 하거나 「클라우드 백업」을 눌러 만드세요.</div>'; return; }
+    box.innerHTML=list.map(s=>`
+      <div class="snaprow">
+        <div>
+          <div style="font-weight:600">${esc(s.reason||'백업')} <span class="pill ${s.kind==='manual'?'status-s':'status-n'}" style="margin-left:4px">${s.kind==='manual'?'수동':'자동'}</span></div>
+          <div style="font-size:11.5px;color:var(--mute)">${esc(s.created_at)} · 과정 ${s.course_cnt}건</div>
+        </div>
+        <button class="sbtn amber" style="padding:5px 12px" onclick="restoreSnapshot(${s.snapshot_id},'${esc(s.created_at)}',${s.course_cnt})">이 시점으로 복원</button>
+      </div>`).join('');
+  }catch(e){ box.innerHTML='<div style="padding:20px;text-align:center;color:var(--red)">불러오기 실패</div>'; }
+}
+function closeSnapshots(){ document.getElementById('snapModal').classList.remove('show'); }
+async function restoreSnapshot(id,ts,cnt){
+  if(!confirm(`${ts} 시점(과정 ${cnt}건)으로 복원할까요?\n\n현재 데이터는 복원 직전 자동 백업되므로 되돌릴 수 있습니다.`)) return;
+  toast('복원 중… 잠시만 기다려주세요');
+  try{
+    const r=await api('/api/backup/'+id+'/restore',{method:'POST',body:'{}'});
+    toast('✓ 복원 완료 (과정 '+(r.restored_courses||cnt)+'건). 새로고침합니다');
+    setTimeout(()=>location.reload(), 1200);
+  }catch(e){ toast('복원 실패: 서버 연결을 확인하세요'); }
 }
 function importBackup(ev){
   const f = ev.target.files[0]; if(!f) return;
