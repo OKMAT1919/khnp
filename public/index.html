@@ -831,10 +831,17 @@ let editingId = null;
 let CATALOG_RAW = [];     // 서버에서 로드한 원본(백업/불러오기 호환용)
 
 async function api(path, opt){
-  const r = await fetch(API_BASE+path, Object.assign({ headers:{'Content-Type':'application/json'} }, opt));
-  if(!r.ok) throw new Error('API '+r.status+' '+path);
-  const ct = r.headers.get('content-type')||'';
-  return ct.includes('json') ? r.json() : r.text();
+  opt = opt || {};
+  // 요청이 무한정 매달리지 않도록 타임아웃 (기본 45초, 대량 bulk는 넉넉히)
+  const ms = opt.timeout || (path.includes('/bulk')||path.includes('/restore') ? 120000 : 45000);
+  const ctl = new AbortController();
+  const timer = setTimeout(()=>ctl.abort(), ms);
+  try{
+    const r = await fetch(API_BASE+path, Object.assign({ headers:{'Content-Type':'application/json'}, signal:ctl.signal }, opt));
+    if(!r.ok) throw new Error('API '+r.status+' '+path);
+    const ct = r.headers.get('content-type')||'';
+    return ct.includes('json') ? r.json() : r.text();
+  } finally { clearTimeout(timer); }
 }
 
 // bootstrap 1회 시도 (오버레이/폴백 없이 데이터만 적재)
@@ -1509,7 +1516,7 @@ async function saveForm(){
     lv: repLv, cp: cpS.slice(0,8), map: mapArr, tags: fmCustomHashes.slice(),
     mu: fmRemark.mu?'O':'X', nw: fmRemark.nw?'O':'X', rec: fmRemark.rec?'O':'X',
     jg:[...jgS], sr:[...srS], jb:[...jbS] };
-  await saveComps();
+  // (역량 마스터는 과정 저장 API가 map의 역량을 자동 반영하므로 전체 saveComps() 호출 안 함 — 속도)
   const pub = document.getElementById('fm_pub').value;
   const published = pub!=='hid';
   if(editingId){
