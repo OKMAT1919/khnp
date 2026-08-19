@@ -1,4 +1,12 @@
 // 전체 상태 동기화 (프론트의 "컬렉션 통째 저장" 패턴 지원)
+//
+// [2026-08-19 수정] 데이터 소실 사고 대응
+//   - replaceInsts 의 TRUNCATE ... CASCADE 가 tb_course 를 함께 삭제하던 문제 수정
+//     (tb_course.institution_id → tb_institution.institution_id 외래키 때문)
+//     → upsert 방식으로 변경. 기관 ID 가 유지되어 과정 연결도 끊기지 않음
+//   - 나머지 3개 함수의 TRUNCATE → DELETE 로 변경 (DB 안전장치와 호환)
+//   - 빈 목록이 들어오면 저장을 거부하도록 방어 로직 추가
+//
 const router = require('express').Router();
 const db = require('../db');
 
@@ -59,38 +67,121 @@ router.get('/bootstrap', async (_req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// =====================================================================
+//  안전 검사 — 빈 목록이 들어오면 기존 데이터를 지우지 않고 거부
+//  (화면이 로드되기 전에 저장이 호출되는 사고를 막음)
+// =====================================================================
+function assertNotEmpty(label, size) {
+  if (!size) {
+    const err = new Error(`${label} 목록이 비어 있어 저장을 중단했습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.`);
+    err.status = 400;
+    throw err;
+  }
+}
+
 // ---- 컬렉션 통째 저장 (프론트 save* 대응) ----
 async function replaceTaxonomy(tree) {
+  const size = Object.keys(tree || {}).length;
+  assertNotEmpty('직무체계', size);
+
   const c = await db.getClient();
-  try { await c.query('BEGIN'); await c.query('TRUNCATE tb_job_taxonomy RESTART IDENTITY');
+  try {
+    await c.query('BEGIN');
+    // TRUNCATE 대신 DELETE — 같은 트랜잭션에서 재삽입하므로 최종 건수는 유지됨
+    await c.query('DELETE FROM tb_job_taxonomy');
     for (const jg of Object.keys(tree)) for (const sr of Object.keys(tree[jg])) {
       const jbs = tree[jg][sr].length ? tree[jg][sr] : [''];
       for (const jb of jbs) await c.query('INSERT INTO tb_job_taxonomy(jikgye,jikryeol,jikmu) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [jg, sr, jb]);
     }
-    await c.query('COMMIT'); } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+    await c.query('COMMIT');
+  } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
+
 async function replaceFramework(tree) {
+  const size = Object.keys(tree || {}).length;
+  assertNotEmpty('교육체계', size);
+
   const c = await db.getClient();
-  try { await c.query('BEGIN'); await c.query('TRUNCATE tb_framework RESTART IDENTITY');
+  try {
+    await c.query('BEGIN');
+    await c.query('DELETE FROM tb_framework');
     for (const d of Object.keys(tree)) for (const j of Object.keys(tree[d])) {
       const ss = tree[d][j].length ? tree[d][j] : [''];
       for (const s of ss) await c.query('INSERT INTO tb_framework(kb1,kb2,kb3) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [d, j, s]);
     }
-    await c.query('COMMIT'); } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+    await c.query('COMMIT');
+  } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
+
 async function replaceComps(rows) {
+  assertNotEmpty('역량', (rows || []).length);
+
   const c = await db.getClient();
-  try { await c.query('BEGIN'); await c.query('TRUNCATE tb_competency RESTART IDENTITY');
+  try {
+    await c.query('BEGIN');
+    await c.query('DELETE FROM tb_competency');
     for (const x of rows) await c.query('INSERT INTO tb_competency(jikgye,jikryeol,jikmu,comp_level,comp_nm) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
       [x.jg, x.sr, x.jb || '', x.lv === '' ? null : x.lv, x.name]);
-    await c.query('COMMIT'); } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+    await c.query('COMMIT');
+  } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
+
+// =====================================================================
+//  교육기관 저장 — 이번 사고의 원인이었던 함수
+//
+//  이전:  TRUNCATE tb_institution RESTART IDENTITY CASCADE
+//         → tb_course 가 institution_id 로 참조 중이므로 과정이 전부 삭제됨
+//         → 게다가 RESTART IDENTITY 로 기관 ID 가 1부터 재발급되어
+//            살아남은 과정이 있었어도 엉뚱한 기관에 연결되었을 것
+//
+//  변경:  ① 들어온 기관은 upsert (있으면 갱신, 없으면 추가) — ID 유지
+//         ② 목록에서 빠진 기관 중 과정이 참조 중인 것은 비활성(use_yn=false)
+//         ③ 아무도 참조하지 않는 것만 실제 삭제
+// =====================================================================
 async function replaceInsts(rows) {
+  assertNotEmpty('교육기관', (rows || []).length);
+
+  const names = rows.map(x => String(x.name || '').trim()).filter(Boolean);
+  assertNotEmpty('교육기관', names.length);
+
   const c = await db.getClient();
-  try { await c.query('BEGIN'); await c.query('TRUNCATE tb_institution RESTART IDENTITY CASCADE');
-    for (const x of rows) await c.query('INSERT INTO tb_institution(inst_nm,biz_no,address,tel,homepage,memo) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (inst_nm) DO NOTHING',
-      [x.name, x.biz || '', x.addr || '', x.tel || '', x.home || '', x.memo || '']);
-    await c.query('COMMIT'); } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+  try {
+    await c.query('BEGIN');
+
+    // ① 있으면 갱신, 없으면 추가 (기관 ID 는 그대로 유지됨)
+    for (const x of rows) {
+      const nm = String(x.name || '').trim();
+      if (!nm) continue;
+      await c.query(
+        `INSERT INTO tb_institution(inst_nm,biz_no,address,tel,homepage,memo,use_yn)
+         VALUES ($1,$2,$3,$4,$5,$6,TRUE)
+         ON CONFLICT (inst_nm) DO UPDATE SET
+           biz_no   = EXCLUDED.biz_no,
+           address  = EXCLUDED.address,
+           tel      = EXCLUDED.tel,
+           homepage = EXCLUDED.homepage,
+           memo     = EXCLUDED.memo,
+           use_yn   = TRUE`,
+        [nm, x.biz || '', x.addr || '', x.tel || '', x.home || '', x.memo || '']);
+    }
+
+    // ② 목록에서 빠졌지만 과정이 참조 중인 기관 → 비활성 처리 (연결 보존)
+    await c.query(
+      `UPDATE tb_institution i SET use_yn = FALSE
+        WHERE i.inst_nm <> ALL($1::text[])
+          AND i.use_yn
+          AND EXISTS (SELECT 1 FROM tb_course c WHERE c.institution_id = i.institution_id)`,
+      [names]);
+
+    // ③ 목록에서 빠졌고 아무도 참조하지 않는 기관 → 실제 삭제
+    await c.query(
+      `DELETE FROM tb_institution i
+        WHERE i.inst_nm <> ALL($1::text[])
+          AND NOT EXISTS (SELECT 1 FROM tb_course c WHERE c.institution_id = i.institution_id)`,
+      [names]);
+
+    await c.query('COMMIT');
+  } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
 
 // 큰 변경(컬렉션 통째 교체) 전에 자동 스냅샷 — 실패해도 본 작업은 진행
