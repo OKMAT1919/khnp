@@ -1,6 +1,26 @@
 const router = require('express').Router();
 const db = require('../db');
 
+// 교육기관 해석: ① 코드 ② 이름 정확일치 ③ 정규화 일치. 없으면 null(미연계) — 자동 생성하지 않음
+const normInst = (t) => String(t || '')
+  .replace(/\(주\)|\(재\)|\(사\)|\(학\)|㈜|주식회사|재단법인|사단법인|학교법인/g, '')
+  .replace(/[\s()\[\]·ㆍ,.\-_/]/g, '').toLowerCase();
+
+async function resolveInst(client, body) {
+  if (body.icd) {
+    const r = await client.query('SELECT institution_id, inst_nm FROM tb_institution WHERE inst_cd=$1', [body.icd]);
+    if (r.rows.length) return r.rows[0];
+  }
+  const nm = String(body.i || '').trim();
+  if (!nm) return null;
+  const exact = await client.query('SELECT institution_id, inst_nm FROM tb_institution WHERE inst_nm=$1', [nm]);
+  if (exact.rows.length) return exact.rows[0];
+  const norm = await client.query(
+    'SELECT institution_id, inst_nm FROM tb_institution WHERE f_norm_inst(inst_nm)=$1 ORDER BY institution_id LIMIT 1', [normInst(nm)]);
+  if (norm.rows.length) return norm.rows[0];
+  return null;   // 미연계 — 원문은 inst_nm 에 그대로 보존
+}
+
 async function logChange(action, target, entity, user) {
   try { await db.query('INSERT INTO tb_change_log(action,target,entity,user_id) VALUES ($1,$2,$3,$4)', [action, target, entity, user || null]); } catch {}
 }
@@ -24,6 +44,7 @@ async function assembleCourse(row) {
   const cp = [...new Set(map.flatMap(m => m[4]))].slice(0, 8);
   return {
     id: row.course_id, n: row.course_nm, cl: row.edu_type, i: row.inst_nm || '',
+    icd: row.inst_cd || '', iid: row.institution_id || null,
     o1: row.host_dept || '', o2: row.host_dept_sub || '', g: row.edu_goal || '', ct: row.edu_content || '',
     d: row.edu_days ?? '', h: row.edu_hours ?? '', m: row.edu_method || '', p: row.edu_place || '',
     lv: row.edu_level ?? '', link: row.course_link || '',
@@ -53,7 +74,7 @@ router.get('/', async (req, res, next) => {
     const wsql = where.length ? 'WHERE ' + where.join(' AND ') : '';
     args.push(Math.min(+limit || 100, 500)); const lim = args.length;
     args.push(+offset || 0); const off = args.length;
-    const rows = (await db.query(`SELECT * FROM tb_course c ${wsql} ORDER BY c.course_nm LIMIT $${lim} OFFSET $${off}`, args)).rows;
+    const rows = (await db.query(`SELECT c.*, i.inst_cd FROM tb_course c LEFT JOIN tb_institution i ON i.institution_id=c.institution_id ${wsql} ORDER BY c.course_nm LIMIT $${lim} OFFSET $${off}`, args)).rows;
     const total = (await db.query(`SELECT count(*)::int AS n FROM tb_course c ${wsql}`, args.slice(0, lim - 1))).rows[0]?.n ?? data.length;
     const data = await Promise.all(rows.map(assembleCourse));
     res.json({ total, count: data.length, data });
@@ -63,7 +84,7 @@ router.get('/', async (req, res, next) => {
 // 상세
 router.get('/:id', async (req, res, next) => {
   try {
-    const r = await db.query('SELECT * FROM tb_course WHERE course_id=$1', [req.params.id]);
+    const r = await db.query('SELECT c.*, i.inst_cd FROM tb_course c LEFT JOIN tb_institution i ON i.institution_id=c.institution_id WHERE c.course_id=$1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'not found' });
     res.json(await assembleCourse(r.rows[0]));
   } catch (e) { next(e); }
@@ -85,11 +106,12 @@ async function upsertCourse(body, isNew) {
 // 실제 upsert 로직 (전달받은 client/트랜잭션 안에서 실행) — 일괄처리에서 재사용
 async function upsertCourseWith(client, body) {
     const id = body.id || ('NEW_' + Date.now());
-    const instId = body.i
-      ? (await client.query('SELECT institution_id FROM tb_institution WHERE inst_nm=$1', [body.i])).rows[0]?.institution_id || null
-      : null;
+    const inst = await resolveInst(client, body);
+    const instId = inst ? inst.institution_id : null;
+    // 연결됐으면 표시 이름을 마스터 표준명으로 통일, 미연계면 원문 보존
+    const instNm = inst ? inst.inst_nm : (body.i || '');
     const vals = [
-      id, body.n, body.cl || '사내교육', instId, body.i || '', body.o1 || '', body.o2 || '',
+      id, body.n, body.cl || '사내교육', instId, instNm, body.o1 || '', body.o2 || '',
       body.g || '', body.ct || '', body.d || null, body.h || null, body.m || '', body.p || '',
       body.lv === '' ? null : body.lv, body.link || '', body.kb1 || '', body.kb2 || '', body.kb3 || '',
       body.nw === 'O', body.mu === 'O', body.rec === 'O', body.published !== false,
