@@ -568,7 +568,7 @@ tr:hover td{background:#FAFBFD}
       <div class="gridscroll"><table class="editgrid" id="inGrid"></table></div>
     </div>
     <div class="tblwrap" id="inTableWrap"><table id="inTable"><thead><tr>
-      <th style="width:20%">교육기관명</th><th>사업자등록번호</th><th>주소</th><th>연락처</th><th>홈페이지</th><th>비고</th><th>연계 과정</th><th style="width:120px"></th>
+      <th style="width:90px">기관ID</th><th style="width:20%">교육기관명</th><th>사업자등록번호</th><th>주소</th><th>연락처</th><th>홈페이지</th><th>비고</th><th>연계 과정</th><th style="width:120px"></th>
     </tr></thead><tbody></tbody></table></div>
     <div class="note">여기서 등록·수정한 교육기관은 <b>데이터관리(과정 등록)</b> 양식의 교육기관 선택 목록에 즉시 반영됩니다. 과정 등록 시 기관을 선택하면 기본 교육장소·교육방법이 자동으로 채워집니다. 「연계 과정」은 해당 기관으로 등록된 게시중 과정 수입니다.</div>
   </div>
@@ -647,8 +647,10 @@ tr:hover td{background:#FAFBFD}
         <option value="new">신규등록만</option>
         <option value="hidden">숨김만</option>
         <option value="unaligned">미연계만 (체계값 확인 필요)</option>
+        <option value="noinst">기관 미연계만 (기관ID 없음)</option>
       </select>
       <button class="sbtn" onclick="resetAF()">필터 초기화</button>
+      <button class="sbtn" id="btnInstFix" onclick="openInstFix()" style="border-color:#F08A00;color:#B45F04">🏫 기관 미연계 일괄 지정</button>
     </div>
     <div class="tblwrap" id="acTableWrap"><table id="aTable"><thead><tr>
       <th style="width:22%">과정명</th><th>교육기관</th><th>방법</th><th>교육일</th><th>시간</th><th>장소</th><th>비고</th><th>수준</th><th>상태</th><th style="width:150px"></th>
@@ -711,7 +713,7 @@ tr:hover td{background:#FAFBFD}
         <div class="instsel" id="instSelWrap">
           <input id="fm_i_search" placeholder="교육기관명 검색…" autocomplete="off"
                  oninput="fmInstFilter()" onfocus="fmInstFilter()" onkeydown="fmInstKey(event)">
-          <input type="hidden" id="fm_i">
+          <input type="hidden" id="fm_i"><input type="hidden" id="fm_icd">
           <div class="instsel-drop" id="instDrop" style="display:none"></div>
           <div class="instsel-chosen" id="instChosen" style="display:none"></div>
         </div>
@@ -1407,12 +1409,14 @@ function fmFillKB3(pre){
   if(pre&&ss.includes(pre)) el.value=pre;
 }
 function fmFillInstList(){ /* datalist 제거됨 — 검색형 셀렉트 사용 */ }
-function fmSetInst(name){
+function fmSetInst(name, code){
   document.getElementById('fm_i').value = name||'';
+  const _f = name ? (findInst(code||name)||null) : null;
+  document.getElementById('fm_icd').value = _f ? (_f.code||'') : '';
   const chosen=document.getElementById('instChosen'), search=document.getElementById('fm_i_search'), drop=document.getElementById('instDrop');
   if(name){
-    const inst=INSTS.find(x=>x.name===name);
-    chosen.innerHTML=`<span class="instchip"><b>${esc(name)}</b>${inst&&inst.addr?`<small>${esc(inst.addr)}</small>`:''}<span class="x" onclick="fmClearInst()">✕</span></span>`;
+    const inst=_f;
+    chosen.innerHTML=`<span class="instchip">${inst&&inst.code?`<em class="mono" style="font-style:normal;color:var(--khnp);font-weight:700;margin-right:6px">${esc(inst.code)}</em>`:''}<b>${esc(name)}</b>${inst&&inst.addr?`<small>${esc(inst.addr)}</small>`:''}<span class="x" onclick="fmClearInst()">✕</span></span>`;
     chosen.style.display='block'; search.style.display='none'; drop.style.display='none';
   } else { chosen.style.display='none'; search.style.display='block'; search.value=''; }
 }
@@ -1423,7 +1427,7 @@ function fmInstFilter(){
   let list=INSTS.slice();
   if(q) list=list.filter(x=>x.name.toLowerCase().includes(q));
   list=list.slice(0,50);
-  let html=list.map(x=>`<div class="instopt" onclick="fmSetInst('${esc(x.name).replace(/'/g,"\\'")}')"><b>${esc(x.name)}</b>${x.addr?`<small>${esc(x.addr)}</small>`:''}</div>`).join('');
+  let html=list.map(x=>`<div class="instopt" onclick="fmSetInst('${esc(x.name).replace(/'/g,"\\'")}','${esc(x.code||'')}')"><em class="mono" style="font-style:normal;color:var(--khnp);font-weight:700;margin-right:6px">${esc(x.code||'')}</em><b>${esc(x.name)}</b>${x.addr?`<small>${esc(x.addr)}</small>`:''}</div>`).join('');
   // 정확히 일치하는 기관이 없으면 신규 등록 안내
   const exact=INSTS.some(x=>x.name.toLowerCase()===q);
   if(q && !exact){
@@ -1438,15 +1442,24 @@ function fmInstKey(ev){
   if(ev.key==='Enter'){ ev.preventDefault();
     const q=(ev.target.value||'').trim();
     const exact=INSTS.find(x=>x.name.toLowerCase()===q.toLowerCase());
-    if(exact) fmSetInst(exact.name);
+    if(exact) fmSetInst(exact.name, exact.code);
     else { const first=document.querySelector('#instDrop .instopt:not(.instnew)'); if(first && INSTS.some(x=>x.name===first.querySelector('b')?.textContent)) first.click(); }
   } else if(ev.key==='Escape'){ document.getElementById('instDrop').style.display='none'; }
 }
-function fmRegisterInst(){
+async function fmRegisterInst(){
   const name=(document.getElementById('fm_i_search').value||'').trim(); if(!name) return;
+  const near=findInst(name);
+  if(near){ // 표기만 다른 기존 기관이 있으면 그쪽으로 유도
+    if(confirm(`이미 등록된 기관으로 보입니다.\n\n  ${near.code} ${near.name}\n\n이 기관을 선택할까요? (취소하면 등록을 중단합니다)`)) fmSetInst(near.name, near.code);
+    return;
+  }
   if(!confirm(`'${name}'을(를) 새 교육기관으로 등록할까요?\n중복·유사 명칭이 없는지 확인 후 등록하세요.`)) return;
-  if(!INSTS.some(x=>x.name===name)){ INSTS.unshift({name, biz:'', addr:'', tel:'', home:'', memo:'과정등록 중 추가'}); saveInsts(); }
-  fmSetInst(name);
+  try{
+    const r = await api('/api/institutions', {method:'POST', body:JSON.stringify({name})});
+    const rec = {code:r.code||'', name:r.name||name, biz:'', addr:'', tel:'', home:'', memo:'과정등록 중 추가'};
+    INSTS.unshift(rec); fmSetInst(rec.name, rec.code); renderInst();
+    toast('✓ 교육기관 '+(rec.code?rec.code+' ':'')+rec.name+' 등록됨');
+  }catch(e){ toast('교육기관 등록 실패 — 서버 연결을 확인하세요'); }
 }
 // 폼 밖 클릭 시 드롭다운 닫기
 document.addEventListener('click', e=>{ const w=document.getElementById('instSelWrap'); if(w && !w.contains(e.target)){ const d=document.getElementById('instDrop'); if(d) d.style.display='none'; } });
@@ -1507,7 +1520,7 @@ async function saveForm(){
   });
   const repLv = lvs.length ? lvs.sort((a,b)=>lvs.filter(v=>v===b).length-lvs.filter(v=>v===a).length)[0] : '';
   const data = { n, cl:document.getElementById('fm_cl').value, m:document.getElementById('fm_m').value,
-    o1, o2:document.getElementById('fm_o2').value.trim(), i:document.getElementById('fm_i').value.trim(),
+    o1, o2:document.getElementById('fm_o2').value.trim(), i:document.getElementById('fm_i').value.trim(), icd:document.getElementById('fm_icd').value.trim(),
     p:document.getElementById('fm_p').value.trim(), d:document.getElementById('fm_d').value.trim(), h,
     g:document.getElementById('fm_g').value.trim(), ct:document.getElementById('fm_ct').value.trim(),
     link:document.getElementById('fm_link').value.trim(),
@@ -1605,6 +1618,7 @@ function acFilteredCourses(){
     if(AF.state==='new' && !String(c.id).startsWith('NEW_')) return false;
     if(AF.state==='hidden' && !c._hidden) return false;
     if(AF.state==='unaligned' && courseAlignIssues(c).length===0) return false;
+    if(AF.state==='noinst' && !(c.i && !c.icd && !findInst(c.i))) return false;
     return true;
   }).sort((a,b)=>(String(b.id).startsWith('NEW_')-String(a.id).startsWith('NEW_'))||a.n.localeCompare(b.n,'ko'));
 }
@@ -1634,7 +1648,7 @@ function isJBok(jg,sr,v){ return !!v && !!TAX[jg] && Array.isArray(TAX[jg][sr]) 
 function isKB1ok(v){ return !!v && !!KTREE[v]; }
 function isKB2ok(kb1,v){ return !!v && !!KTREE[kb1] && !!KTREE[kb1][v]; }
 function isKB3ok(kb1,kb2,v){ return !!v && !!KTREE[kb1] && Array.isArray(KTREE[kb1][kb2]) && KTREE[kb1][kb2].includes(v); }
-function isInstOk(v){ return !!v && INSTS.some(x=>x.name===v); }
+function isInstOk(v){ return !!v && !!findInst(v); }
 function isCompOk(v){ return !!v && COMPS.some(x=>x.name===v); }
 // 과정의 각 값이 마스터와 연계되는지 검사 → 미연계 항목 목록 반환
 function courseAlignIssues(c){
@@ -2110,14 +2124,15 @@ function renderInstGrid(){
   const q=(document.getElementById('inQ').value||'').toLowerCase();
   const cols=[['name','교육기관명','220'],['biz','사업자등록번호','130'],['addr','주소','200'],['tel','연락처','120'],['home','홈페이지','200'],['memo','비고','140']];
   window._inCols=cols;
-  const idxList = INSTS.map((x,i)=>i).filter(i=>{ if(!q) return true; const x=INSTS[i]; return (x.name||'').toLowerCase().includes(q)||(x.addr||'').toLowerCase().includes(q); });
+  const idxList = INSTS.map((x,i)=>i).filter(i=>{ if(!q) return true; const x=INSTS[i]; return (x.name||'').toLowerCase().includes(q)||(x.addr||'').toLowerCase().includes(q)||(x.code||'').toLowerCase().includes(q); });
   window._inIdxList=idxList;
-  let html='<thead><tr><th class="rm"></th><th class="cellnum">#</th>'+cols.map(c=>`<th style="min-width:${c[2]}px">${c[1]}</th>`).join('')+'</tr></thead><tbody>';
+  let html='<thead><tr><th class="rm"></th><th class="cellnum">#</th><th style="min-width:80px">기관ID</th>'+cols.map(c=>`<th style="min-width:${c[2]}px">${c[1]}</th>`).join('')+'</tr></thead><tbody>';
   html+=idxList.map((i,vis)=>{
     const x=INSTS[i];
     return `<tr>
       <td class="rm"><button onclick="instGridDel(${i})" title="삭제">✕</button></td>
-      <td class="cellnum">${vis+1}</td>`+
+      <td class="cellnum">${vis+1}</td>
+      <td class="cellnum mono" style="color:var(--khnp);font-weight:700">${esc(x.code||'신규')}</td>`+
       cols.map((c,ci)=>`<td><input value="${esc(x[c[0]]||'')}" data-r="${vis}" data-c="${ci}" oninput="INSTS[${i}]['${c[0]}']=this.value" onpaste="instGridPaste(event,${vis},${ci})" ${c[0]==='name'?'style="font-weight:600"':''}></td>`).join('')+
     `</tr>`;
   }).join('');
@@ -2163,8 +2178,74 @@ async function saveInstGrid(){
   toast('✓ 교육기관 '+INSTS.length+'개가 저장되었습니다');
 }
 
-function instCourseCounts(){ return count(visCat(), c=>c.i); }
+/* 교육기관 명칭 정규화 — 공백·괄호·법인표기 제거 (서버 f_norm_inst 와 동일 규칙) */
+function normInst(t){ return String(t||'')
+  .replace(/\(주\)|\(재\)|\(사\)|\(학\)|㈜|주식회사|재단법인|사단법인|학교법인/g,'')
+  .replace(/[\s()\[\]·ㆍ,.\-_/]/g,'').toLowerCase(); }
+/* 이름·코드로 기관 찾기 (①코드 ②정확일치 ③정규화 일치) */
+function findInst(nameOrCode){
+  const v=String(nameOrCode||'').trim(); if(!v) return null;
+  return INSTS.find(x=>x.code===v) || INSTS.find(x=>x.name===v)
+      || INSTS.find(x=>normInst(x.name)===normInst(v)) || null;
+}
+/* 기관코드별 연계 과정 수 */
+function instCourseCounts(){
+  const m={}; visCat().forEach(c=>{ const cd=c.icd || (findInst(c.i)||{}).code; if(cd) m[cd]=(m[cd]||0)+1; });
+  return m;
+}
+/* 미연계 원문별 과정 수 — 기관 마스터에 붙지 않은 이름 */
+function unlinkedInstCounts(){
+  const m={}; CAT.forEach(c=>{ if(c.i && !c.icd && !findInst(c.i)) m[c.i]=(m[c.i]||0)+1; });
+  return m;
+}
 function instHome(name){ const x=INSTS.find(i=>i.name===name); return x&&x.home?x.home:''; }
+/* ============ 기관 미연계 일괄 지정 ============ */
+/* 같은 원문을 쓰는 과정을 한 번에 기관에 연결합니다. */
+function openInstFix(){
+  const miss = unlinkedInstCounts();
+  const names = Object.keys(miss).sort((a,b)=>miss[b]-miss[a]||a.localeCompare(b,'ko'));
+  const box = document.getElementById('instFixWrap');
+  if(!names.length){
+    box.innerHTML = '<div class="modal-h"><b>🏫 기관 미연계 일괄 지정</b><button class="xbtn" onclick="closeInstFix()">✕</button></div>'
+      + '<div style="padding:28px;text-align:center;color:var(--mute)">미연계 교육기관이 없습니다. 모든 과정이 기관ID에 연결되어 있습니다.</div>';
+    document.getElementById('instFixModal').classList.add('show'); return;
+  }
+  const opts = INSTS.slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'))
+    .map(x=>`<option value="${esc(x.code||'')}">${esc((x.code?x.code+' · ':'')+x.name)}</option>`).join('');
+  box.innerHTML = '<div class="modal-h"><b>🏫 기관 미연계 일괄 지정</b><button class="xbtn" onclick="closeInstFix()">✕</button></div>'
+    + `<div class="note" style="margin:8px 0 10px">과정에 적혀 있으나 기관 마스터에 붙지 않은 이름 <b>${names.length}종</b>입니다. 오른쪽에서 기관을 고르고 「연결」을 누르면 <b>같은 이름을 쓰는 과정이 한 번에</b> 연결됩니다. 기관 자체가 없으면 먼저 교육기관 탭에 등록하세요.</div>`
+    + '<div class="tblwrap" style="max-height:52vh"><table><thead><tr>'
+    + '<th style="width:34%">과정에 적힌 원문</th><th style="width:70px">과정수</th><th>연결할 교육기관</th><th style="width:90px"></th></tr></thead><tbody>'
+    + names.map((n,i)=>{
+        const near = INSTS.find(x=>normInst(x.name)===normInst(n));
+        return `<tr>
+          <td><b>${esc(n)}</b></td>
+          <td class="mono">${miss[n]}</td>
+          <td><select id="ifx${i}" class="sbtn" style="width:100%"><option value="">— 선택 —</option>${opts}</select>
+              ${near?`<div style="font-size:11px;color:#B45F04;margin-top:3px">유사 기관 추천: ${esc(near.code||'')} ${esc(near.name)}</div>`:''}</td>
+          <td><button class="sbtn blue" onclick="doInstFix(${i},'${esc(n).replace(/'/g,"\\'")}')">연결</button></td>
+        </tr>`;
+      }).join('')
+    + '</tbody></table></div>';
+  document.getElementById('instFixModal').classList.add('show');
+  // 유사 기관을 기본 선택값으로
+  names.forEach((n,i)=>{ const near=INSTS.find(x=>normInst(x.name)===normInst(n)); const el=document.getElementById('ifx'+i); if(near&&el) el.value=near.code||''; });
+}
+function closeInstFix(){ document.getElementById('instFixModal').classList.remove('show'); }
+async function doInstFix(i, raw){
+  const code = (document.getElementById('ifx'+i)||{}).value || '';
+  if(!code){ toast('연결할 교육기관을 선택하세요'); return; }
+  const inst = INSTS.find(x=>x.code===code); if(!inst) return;
+  try{
+    const r = await api('/api/institutions/link', {method:'POST', body:JSON.stringify({raw, code})});
+    // 로컬 카탈로그에도 반영
+    CAT.forEach(c=>{ if(c.i===raw && !c.icd){ c.i=inst.name; c.icd=inst.code; } });
+    log('기관 연결', raw+' → '+code+' '+inst.name);
+    toast('✓ '+(r.linked||0)+'건을 '+inst.name+'에 연결했습니다');
+    openInstFix(); render(); renderAdmin(); renderInst();
+  }catch(e){ toast('연결 실패 — 서버 연결을 확인하세요'); }
+}
+
 function renderInst(){
   const cc = instCourseCounts();
   const withHome = INSTS.filter(x=>x.home).length;
@@ -2175,24 +2256,25 @@ function renderInst(){
     <div class="kpi" style="--kc:#6D5BD0"><small>사업자번호 등록</small><b>${withBiz.toLocaleString()}</b><span>개 기관</span></div>
     <div class="kpi" style="--kc:#F08A00"><small>연계</small><b>과정 등록 · 신청현황</b><span>선택목록 · 홈페이지 링크</span></div>`;
   const q = (document.getElementById('inQ').value||'').toLowerCase();
-  let rows = INSTS.filter(x=> !q || x.name.toLowerCase().includes(q) || (x.addr||'').toLowerCase().includes(q));
-  rows.sort((a,b)=>(cc[b.name]||0)-(cc[a.name]||0)||a.name.localeCompare(b.name,'ko'));
+  let rows = INSTS.filter(x=> !q || x.name.toLowerCase().includes(q) || (x.addr||'').toLowerCase().includes(q) || (x.code||'').toLowerCase().includes(q));
+  rows.sort((a,b)=>(cc[b.code]||0)-(cc[a.code]||0)||a.name.localeCompare(b.name,'ko'));
   const shown = rows.slice(0,400);
   document.querySelector('#inTable tbody').innerHTML = shown.length?shown.map((x)=>{
     const ri = INSTS.indexOf(x);
     return `<tr>
+      <td class="mono" style="font-size:11px;color:var(--khnp);font-weight:700">${esc(x.code||'—')}</td>
       <td><b>${esc(x.name)}</b></td>
       <td style="font-size:11px" class="mono">${esc(x.biz)||'-'}</td>
       <td style="font-size:11px">${esc(x.addr)||'-'}</td>
       <td style="font-size:11px" class="mono">${esc(x.tel)||'-'}</td>
       <td style="font-size:11px">${x.home?`<a href="${esc(x.home)}" target="_blank" rel="noopener" style="color:var(--khnp)">${esc(x.home.replace(/^https?:\/\//,'').slice(0,30))}</a>`:'-'}</td>
       <td style="font-size:11px">${esc(x.memo)||'-'}</td>
-      <td>${cc[x.name]||0}</td>
+      <td>${cc[x.code]||0}</td>
       <td style="white-space:nowrap">
         <button class="sbtn" style="padding:3px 9px;font-size:11px" onclick="openInstForm(${ri})">수정</button>
         <button class="sbtn red" style="padding:3px 9px;font-size:11px" onclick="delInst(${ri})">삭제</button>
       </td>
-    </tr>`; }).join(''):'<tr><td colspan="8" style="text-align:center;padding:36px;color:var(--mute)">등록된 교육기관이 없습니다. 「＋ 교육기관 등록」으로 추가하세요.</td></tr>';
+    </tr>`; }).join(''):'<tr><td colspan="9" style="text-align:center;padding:36px;color:var(--mute)">등록된 교육기관이 없습니다. 「＋ 교육기관 등록」으로 추가하세요.</td></tr>';
   document.getElementById('stTag3').innerHTML = storageOK
     ? `<span class="storage-tag st-on">● 클라우드 서버 연결됨 — 자동 저장</span> <span style="font-size:11px;color:var(--mute)">표시 ${shown.length}/${rows.length}</span>`
     : `<span class="storage-tag st-off">● 서버 미연결</span> <span style="font-size:11px;color:var(--mute)">표시 ${shown.length}/${rows.length}</span>`;
@@ -2245,6 +2327,7 @@ async function instBulkImport(ev){
     if(!rows.length){ toast('데이터가 없습니다'); return; }
     const pick=(r,keys)=>{ for(const k of keys){ if(r[k]!=null&&String(r[k]).trim()!=='') return String(r[k]).trim(); } return ''; };
     let added=0, updated=0, skipped=0;
+    let instLinked=0, instMiss={};
     rows.forEach(r=>{
       const name=pick(r,['교육기관명','기관명','교육기관','name']);
       if(!name){ skipped++; return; }
@@ -2337,13 +2420,21 @@ async function bulkImport(ev){
       OVERRIDES.added.push({...c}); CAT.push(c); newCourses.push({...c, published:true});
       // 직무체계 자동 반영
       jgArr.forEach(jg=>{ if(!TAX[jg]){TAX[jg]={};updatedTax=true;} srArr.forEach(sr=>{ if(!TAX[jg][sr]){TAX[jg][sr]=[];updatedTax=true;} jbArr.forEach(jb=>{ if(!TAX[jg][sr].includes(jb)){TAX[jg][sr].push(jb);updatedTax=true;} }); }); });
-      // 교육기관 자동 반영
-      if(inst && !INSTS.some(x=>x.name===inst)){ INSTS.unshift({name:inst, biz:'', addr:c.p||'', tel:'', home:'', memo:'일괄등록 자동추가'}); }
+      // 교육기관 연계 — 코드/정확일치/정규화일치 순으로 붙이고, 없으면 미연계로 남깁니다
+      // (없는 기관을 자동 생성하면 유사명칭 중복이 쌓이므로 만들지 않습니다)
+      if(inst){
+        const hit=findInst(inst);
+        if(hit){ c.i=hit.name; c.icd=hit.code||''; instLinked++; }
+        else { c.icd=''; instMiss[inst]=(instMiss[inst]||0)+1; }
+      }
       // 교육체계 자동 반영
       if(c.kb1){ KTREE[c.kb1]=KTREE[c.kb1]||{}; if(c.kb2){ KTREE[c.kb1][c.kb2]=KTREE[c.kb1][c.kb2]||[]; if(c.kb3&&!KTREE[c.kb1][c.kb2].includes(c.kb3)) KTREE[c.kb1][c.kb2].push(c.kb3); } }
       added++;
     });
     try{
+      // 기준정보(직무체계·역량·교육체계)를 과정보다 먼저 저장해야 과정 저장 시점에 연결이 잡힙니다
+      busyShow('기준정보를 반영하는 중입니다…', '직무체계·역량·교육체계를 먼저 저장합니다.');
+      await saveComps(); await saveKtree(); if(updatedTax) await saveTax();
       if(newCourses.length){
         busyShow('과정을 등록하는 중입니다…', `총 ${newCourses.length}건을 서버에 저장하고 있습니다.`);
         const CHUNK=300;
@@ -2353,14 +2444,23 @@ async function bulkImport(ev){
           const done=Math.min(i+CHUNK,newCourses.length);
           busyProgress(Math.round(done/newCourses.length*100), `과정 저장 중… ${done} / ${newCourses.length}건`);
         }
-        busyProgress(100, '기준정보(직무체계·역량·교육기관)를 반영하는 중…');
+        busyProgress(100, '마무리하는 중…');
       }
-      await saveInsts(); await saveComps(); await saveKtree(); if(updatedTax) await saveTax();
       busyHide();
     }catch(e){ busyHide(); toast('일괄등록 서버 반영 실패: 연결을 확인하세요'); }
     log('Excel 일괄등록', added+'개 과정 ('+f.name+')');
     render(); renderAdmin(); renderInst(); renderTax(); renderComp(); renderFrame();
-    toast('✓ '+added+'개 과정을 일괄 등록했습니다 — 스토어에 게시되었습니다');
+    const missNames=Object.keys(instMiss);
+    if(missNames.length){
+      const top=missNames.sort((a,b)=>instMiss[b]-instMiss[a]).slice(0,8)
+        .map(n=>'  · '+n+' ('+instMiss[n]+'건)').join('\n');
+      alert('✓ '+added+'개 과정을 일괄 등록했습니다.\n\n'
+        +'교육기관 연계: '+instLinked+'건 / 미연계: '+Object.values(instMiss).reduce((a,b)=>a+b,0)+'건\n\n'
+        +'아래 이름은 기관 마스터에 없어 미연계로 남겼습니다.\n'+top
+        +(missNames.length>8?'\n  … 외 '+(missNames.length-8)+'종':'')
+        +'\n\n과정 등록 탭의 「기관 미연계」 필터에서 기관을 지정하거나,\n교육기관 탭에 먼저 등록한 뒤 연결하세요.');
+    }
+    toast('✓ '+added+'개 과정을 일괄 등록했습니다 — 기관 연계 '+instLinked+'건');
   }catch(e){ console.error(e); toast('불러오기 실패: 엑셀 형식을 확인하세요'); }
 }
 
@@ -2807,5 +2907,8 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape'){
   render(); renderCart();
 })();
 </script>
+<div class="modal" id="instFixModal"><div class="ov show" style="z-index:100" onclick="closeInstFix()"></div>
+  <div class="modal-card" style="max-width:900px" id="instFixWrap"></div>
+</div>
 </body>
 </html>
