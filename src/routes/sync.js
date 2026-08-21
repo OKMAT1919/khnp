@@ -14,7 +14,7 @@ const db = require('../db');
 router.get('/bootstrap', async (_req, res, next) => {
   try {
     // courses (map/cp/tags 조립)
-    const courses = (await db.query('SELECT * FROM tb_course ORDER BY course_nm')).rows;
+    const courses = (await db.query('SELECT c.*, i.inst_cd FROM tb_course c LEFT JOIN tb_institution i ON i.institution_id=c.institution_id ORDER BY c.course_nm')).rows;
     const maps = (await db.query('SELECT map_id,course_id,jikgye,jikryeol,jikmu,edu_level FROM tb_course_map')).rows;
     const compRows = (await db.query('SELECT map_id,comp_nm FROM tb_course_comp')).rows;
     const tagRows = (await db.query('SELECT course_id,tag FROM tb_course_tag')).rows;
@@ -26,6 +26,7 @@ router.get('/bootstrap', async (_req, res, next) => {
       const map = ms.map(m => [m.jikgye, m.jikryeol, m.jikmu, m.edu_level ?? '', compByMap[m.map_id] || []]);
       return {
         id: row.course_id, n: row.course_nm, cl: row.edu_type, i: row.inst_nm || '',
+        icd: row.inst_cd || '', iid: row.institution_id || null,
         o1: row.host_dept || '', o2: row.host_dept_sub || '', g: row.edu_goal || '', ct: row.edu_content || '',
         d: row.edu_days ?? '', h: row.edu_hours ?? '', m: row.edu_method || '', p: row.edu_place || '',
         lv: row.edu_level ?? '', link: row.course_link || '',
@@ -51,7 +52,7 @@ router.get('/bootstrap', async (_req, res, next) => {
     // competencies
     const comps = (await db.query('SELECT jikgye AS jg,jikryeol AS sr,jikmu AS jb,comp_level AS lv,comp_nm AS name FROM tb_competency WHERE use_yn ORDER BY comp_nm')).rows;
     // institutions
-    const insts = (await db.query('SELECT inst_nm AS name,biz_no AS biz,address AS addr,tel,homepage AS home,memo FROM tb_institution WHERE use_yn ORDER BY inst_nm')).rows;
+    const insts = (await db.query('SELECT inst_cd AS code,inst_nm AS name,biz_no AS biz,address AS addr,tel,homepage AS home,memo FROM tb_institution WHERE use_yn ORDER BY inst_nm')).rows;
     // depts + demands + log
     const depts = (await db.query('SELECT dept_nm FROM tb_dept WHERE use_yn ORDER BY dept_id')).rows.map(r => r.dept_nm);
     const demandRows = (await db.query(`SELECT d.demand_id,d.dept_nm,d.submitted_at,i.course_id,i.course_nm,i.inst_nm,i.edu_type,i.edu_hours,i.apply_cnt,i.period,i.remark
@@ -148,10 +149,19 @@ async function replaceInsts(rows) {
   try {
     await c.query('BEGIN');
 
-    // ① 있으면 갱신, 없으면 추가 (기관 ID 는 그대로 유지됨)
+    // ① 코드가 있으면 그 기관을 갱신(개명 포함), 없으면 이름 기준 upsert
+    //    코드로 갱신하면 institution_id 가 유지되므로 이름을 바꿔도 과정 연결이 끊기지 않습니다.
     for (const x of rows) {
       const nm = String(x.name || '').trim();
       if (!nm) continue;
+      const cd = String(x.code || '').trim();
+      if (cd) {
+        const r = await c.query(
+          `UPDATE tb_institution SET inst_nm=$2,biz_no=$3,address=$4,tel=$5,homepage=$6,memo=$7,use_yn=TRUE
+            WHERE inst_cd=$1 RETURNING institution_id`,
+          [cd, nm, x.biz || '', x.addr || '', x.tel || '', x.home || '', x.memo || '']);
+        if (r.rowCount) continue;   // 갱신 완료
+      }
       await c.query(
         `INSERT INTO tb_institution(inst_nm,biz_no,address,tel,homepage,memo,use_yn)
          VALUES ($1,$2,$3,$4,$5,$6,TRUE)
@@ -165,19 +175,28 @@ async function replaceInsts(rows) {
         [nm, x.biz || '', x.addr || '', x.tel || '', x.home || '', x.memo || '']);
     }
 
+    // ①-b 개명이 있었다면 과정의 표시 이름도 함께 따라가게 (연결은 ID 로 유지)
+    await c.query(
+      `UPDATE tb_course c SET inst_nm = i.inst_nm
+         FROM tb_institution i
+        WHERE c.institution_id = i.institution_id
+          AND c.inst_nm IS DISTINCT FROM i.inst_nm`);
+
     // ② 목록에서 빠졌지만 과정이 참조 중인 기관 → 비활성 처리 (연결 보존)
     await c.query(
       `UPDATE tb_institution i SET use_yn = FALSE
         WHERE i.inst_nm <> ALL($1::text[])
           AND i.use_yn
-          AND EXISTS (SELECT 1 FROM tb_course c WHERE c.institution_id = i.institution_id)`,
+          AND EXISTS (SELECT 1 FROM tb_course c
+                       WHERE c.institution_id = i.institution_id OR c.inst_nm = i.inst_nm)`,
       [names]);
 
     // ③ 목록에서 빠졌고 아무도 참조하지 않는 기관 → 실제 삭제
     await c.query(
       `DELETE FROM tb_institution i
         WHERE i.inst_nm <> ALL($1::text[])
-          AND NOT EXISTS (SELECT 1 FROM tb_course c WHERE c.institution_id = i.institution_id)`,
+          AND NOT EXISTS (SELECT 1 FROM tb_course c
+                           WHERE c.institution_id = i.institution_id OR c.inst_nm = i.inst_nm)`,
       [names]);
 
     await c.query('COMMIT');
