@@ -356,6 +356,17 @@ tr:hover td{background:#FAFBFD}
 .toast.show{transform:translateX(-50%) translateY(0)}
 @media (max-width:1100px){.listhead{display:none}.crow{grid-template-columns:1fr;gap:6px}.rowbtns{justify-content:flex-start}}
 @media (max-width:960px){.store{grid-template-columns:1fr}aside{position:static;max-height:none}.hd-top{flex-wrap:wrap}.searchbox{order:3;max-width:100%;flex-basis:100%}}
+
+/* ---- v6 ---- */
+.save-state{font-size:11.5px;padding:5px 10px;border-radius:8px;background:#1A2740;border:1px solid #2A3A55;color:#9DB0CC;white-space:nowrap}
+.save-state.st-ok{color:#5ED6A5;border-color:#1E5C46}.save-state.st-saving{color:#8FB8FF}.save-state.st-dirty{color:#FFC978}.save-state.st-err{color:#FF8A8A;border-color:#7A2E2E}.save-state.st-off{color:#FF8A8A}
+.save-state:empty{display:none}
+.badge.b-req{background:#FFF3E0;color:#B4690E}
+.seal-row{display:flex;align-items:center;gap:12px;padding:9px 6px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.hd-box{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0 10px}
+.hd-row{padding:6px 0;border-bottom:1px dashed var(--line);font-size:12.5px}.hd-row:last-child{border-bottom:none}
+.hd-row b{display:inline-block;min-width:96px}.hd-same{color:var(--mute)}.hd-cnt{color:var(--khnp);font-weight:600;margin-left:6px}
+.hd-item{font-size:12px;padding:2px 0 2px 14px;color:var(--ink2)}.hd-item.add{color:#0E7A4B}.hd-item.rem{color:#C0392B;text-decoration:line-through}.hd-item.mod{color:#B4690E}
 </style>
 </head>
 <body>
@@ -375,11 +386,12 @@ tr:hover td{background:#FAFBFD}
         <label>내 부서</label>
         <select id="deptSel"></select>
       </div>
+      <span id="saveState" class="save-state"></span>
       <button class="cart-btn" onclick="openCart()">🛒 2027년 교육과정 등록<span class="cart-badge" id="cartN">0</span></button>
     </div>
   </div>
   <nav class="tabs">
-    <button class="tab on" data-t="store" onclick="showTab('store')">🛍️ 과정 스토어</button>
+    <button class="tab on" data-t="store" onclick="showTab('store')">🗂️ 교육과정 신청 관리</button>
     <button class="tab" data-t="demand" onclick="showTab('demand')">📋 교육신청 현황</button>
     <button class="tab" data-t="yearcmp" onclick="showTab('yearcmp')">📊 연도 비교 분석</button>
     <button class="tab" data-t="tax" onclick="showTab('tax')">🗂️ 데이터관리 (직무체계)</button>
@@ -387,6 +399,7 @@ tr:hover td{background:#FAFBFD}
     <button class="tab" data-t="inst" onclick="showTab('inst')">🏫 데이터관리 (교육기관)</button>
     <button class="tab" data-t="comp" onclick="showTab('comp')">🎯 데이터관리 (역량)</button>
     <button class="tab" data-t="admin" onclick="showTab('admin')">⚙️ 데이터관리 (과정 등록)</button>
+    <button class="tab" data-t="hist" onclick="showTab('hist')">🕘 기준정보 이력</button>
   </nav>
 </header>
 
@@ -421,6 +434,7 @@ tr:hover td{background:#FAFBFD}
       <b><span class="num" id="rCount">0</span>개 과정</b>
       <input id="qStore" class="storesearch" placeholder="🔍 과정 제목 검색" oninput="F.q=this.value;document.getElementById('q').value=this.value;render()">
       <div class="active-filters" id="afRow"></div>
+      <button class="sbtn amber" id="reqBtn" onclick="openRequestForm()" title="이 연도 카탈로그에 없는 과정을 새로 신청합니다. 데이터관리(과정 등록)와 같은 양식이 열리며, 저장 즉시 장바구니에 담깁니다.">＋ 2027년 신규 과정 신청</button>
       <select class="sortsel" id="sortSel" onchange="render()">
         <option value="name">가나다순</option>
         <option value="new">신규등록 우선</option>
@@ -444,14 +458,16 @@ tr:hover td{background:#FAFBFD}
     <div class="p-h"><b>부서별 교육신청 내역</b>
       <span class="sp">
         <select id="dFilterDept" class="sbtn" onchange="renderDemand()"><option value="">전체 부서</option></select>
+        <select id="dFilterKind" class="sbtn" onchange="renderDemand()"><option value="">기존+신규</option><option>기존</option><option>신규</option></select>
+        <select id="dFilterSt" class="sbtn" onchange="renderDemand()"><option value="">전체 상태</option><option>제출</option><option>검토</option><option>확정</option><option>반려</option></select>
         <button class="sbtn" onclick="exportDemandCSV()">CSV 내보내기</button>
         <button class="sbtn blue" onclick="exportDemandXLSX()">Excel 내보내기</button>
       </span>
     </div>
     <div class="tblwrap"><table id="dTable"><thead><tr>
-      <th>부서</th><th>과정명</th><th>교육기관</th><th>교육분류</th><th>직계/직렬</th><th>신청인원</th><th>희망시기</th><th>교육시간</th><th>비고</th><th>신청일시</th><th></th>
+      <th>부서</th><th>과정명</th><th>구분</th><th>교육기관</th><th>교육분류</th><th>직계/직렬</th><th>신청인원</th><th>희망시기</th><th>교육시간</th><th>비고</th><th>신청일시</th><th>상태</th><th></th>
     </tr></thead><tbody></tbody></table></div>
-    <div class="note">부서에서 장바구니로 제출한 교육신청이 이곳에 모입니다. 교육 담당 부서는 이 화면에서 전체 수요를 취합해 Excel로 내려받을 수 있습니다.</div>
+    <div class="note"><b>구분</b> — 이전 연도 카탈로그에 있던 과정(대표코드 동일)을 신청하면 <b>기존</b>, 이 연도에 처음 신청·등록된 과정은 <b>신규</b>로 자동 분류됩니다. <b>상태</b> — 제출 → 검토 → 확정(반려). 신규 과정을 「확정」하면 카탈로그에 정식 게시됩니다. 부서에서 장바구니로 제출한 교육신청이 이곳에 모입니다. 교육 담당 부서는 이 화면에서 전체 수요를 취합해 Excel로 내려받을 수 있습니다.</div>
   </div>
 </div>
 
@@ -612,6 +628,7 @@ tr:hover td{background:#FAFBFD}
     <div class="p-h"><b>교육과정 마스터 (등록 → 스토어 게시)</b><span id="stTag"></span>
       <span class="sp">
         <button class="sbtn amber" onclick="openForm()">＋ 신규 과정 등록</button>
+        <button class="sbtn green" id="reopenBtn" onclick="reopenFiltered()" title="현재 필터의 과정을 다음 연도로 재개설합니다 (대표코드 유지)">↻ 2027년 일괄 재개설</button>
         <button class="sbtn blue" onclick="document.getElementById('bulkFile').click()">⬆ Excel 일괄 등록</button>
         <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="bulkImport(event)">
         <button class="sbtn" onclick="exportCatalogCSV()">카탈로그 CSV</button>
@@ -662,6 +679,34 @@ tr:hover td{background:#FAFBFD}
     <div class="tblwrap" style="max-height:220px"><table id="logTable"><thead><tr><th>시각</th><th>작업</th><th>대상</th></tr></thead><tbody></tbody></table></div>
   </div>
 </div>
+</div>
+
+<!-- ================= MASTER HISTORY ================= -->
+<div id="v-hist" style="display:none">
+  <div class="kpis" id="hsKpis"></div>
+  <div class="panel">
+    <div class="p-h"><b>연도별 기준정보 확정 (Effective Dating)</b>
+      <span class="sp">
+        <label style="font-size:11.5px;color:var(--mute)">적용 연도</label>
+        <select id="hsYear" class="sbtn" onchange="HIST_YEAR=parseInt(this.value);renderHist()"></select>
+        <button class="sbtn amber" onclick="sealYear(HIST_YEAR)">🔒 이 연도 기준정보 확정</button>
+      </span>
+    </div>
+    <div id="hsSeals"></div>
+    <div class="note">기준정보(직무체계·교육체계·교육기관·역량)의 모든 추가·수정·삭제·폐지는 <b>필드 단위</b>로 자동 기록되며, 위에서 고른 <b>적용 연도</b>가 함께 저장됩니다. 연말에 「확정」을 누르면 그 시점 전체가 봉인되어 <b>"2026년에는 이 직무가 어느 직렬 아래 있었나"</b>를 언제든 현재와 비교할 수 있습니다. 연계 과정이 있는 항목은 삭제 대신 <b>폐지</b>로 처리되어 과정에 ⚠ 재매핑 필요가 표시됩니다.</div>
+  </div>
+  <div class="panel">
+    <div class="p-h"><b>변경 이력 (필드 단위)</b>
+      <span class="sp">
+        <input id="hsQ" class="sbtn" placeholder="항목·값 검색" oninput="histF.q=this.value.toLowerCase();renderHist()" style="min-width:160px">
+        <select class="sbtn" onchange="histF.kind=this.value;renderHist()"><option value="">전체 종류</option><option value="tax">직무체계</option><option value="frame">교육체계</option><option value="inst">교육기관</option><option value="comp">역량</option><option value="edu">교육분류·방법</option></select>
+        <select class="sbtn" id="hsYrF" onchange="histF.yr=this.value;renderHist()"><option value="">전체 연도</option><option>2025</option><option>2026</option><option>2027</option><option>2028</option></select>
+        <button class="sbtn" onclick="exportHistCSV()">CSV 내보내기</button>
+      </span>
+    </div>
+    <div class="tblwrap" style="max-height:60vh"><table id="hsTable"><thead><tr><th>시각</th><th>적용연도</th><th>종류</th><th>작업</th><th>항목 (경로)</th><th>변경 전</th><th>변경 후</th><th>작업 부서</th></tr></thead><tbody></tbody></table></div>
+    <div class="note">표시 건수: <span id="hsShown">0</span></div>
+  </div>
 </div>
 
 <!-- cart drawer -->
@@ -847,8 +892,7 @@ async function api(path, opt){
 }
 
 // bootstrap 1회 시도 (오버레이/폴백 없이 데이터만 적재)
-async function loadBootstrapOnce(){
-  const b = await api('/api/sync/bootstrap');
+function applyBootstrap(b){
   CATALOG_RAW = b.catalog || [];
   CAT = CATALOG_RAW.map(c=>({...c}));
   if(b.tax && Object.keys(b.tax).length) TAX = b.tax;
@@ -861,7 +905,15 @@ async function loadBootstrapOnce(){
     const ds=document.getElementById('deptSel'), cs=document.getElementById('cartDept');
     if(ds&&cs){ ds.innerHTML = cs.innerHTML = b.depts.map(d=>`<option>${d}</option>`).join(''); }
   }
+  if(b.kv && typeof b.kv==='object') KV = b.kv;
+  if(Array.isArray(b.history)) HIST = b.history;
+}
+async function loadBootstrapOnce(){
+  const b = await api('/api/sync/bootstrap');
+  applyBootstrap(b);
   storageOK = true;
+  afterBootstrap();
+  idbSet('bootstrap', {b, ts:Date.now()});   // 다음 접속 시 즉시 표시용 캐시
 }
 function wakeShow(show){ document.getElementById('wakeOverlay').style.display = show?'flex':'none'; }
 function wakeProgress(pct, desc){
@@ -883,11 +935,19 @@ function busyHide(){ document.getElementById('busyOverlay').style.display='none'
 
 // 초기 로드: 서버가 절전이면 깨우며 자동 재시도
 async function initStorage(){
+  // 0차: IndexedDB 캐시가 있으면 먼저 화면에 표시 (서버 절전 중에도 즉시 조회 가능)
+  let cached=null;
+  try{ cached = await idbGet('bootstrap'); }catch(e){}
+  if(cached && cached.b){
+    applyBootstrap(cached.b); storageOK=false; afterBootstrap();
+    try{ render(); }catch(_){}
+    setSaveState('saving','↻ 캐시 표시 중 — 서버 동기화…');
+  }
   // 1차: 빠른 시도 (서버가 이미 깨어 있으면 즉시 성공)
-  try{ await loadBootstrapOnce(); return; }
+  try{ await loadBootstrapOnce(); try{ render(); renderAdmin&&renderAdmin(); }catch(_){} return; }
   catch(e){ /* 잠들어 있을 가능성 → 깨우기 모드 진입 */ }
 
-  wakeShow(true);
+  if(!cached) wakeShow(true);
   const MAX=12;            // 최대 재시도 횟수
   const GAP=6000;          // 재시도 간격(ms) — 총 최대 ~72초
   for(let i=1;i<=MAX;i++){
@@ -911,8 +971,8 @@ async function initStorage(){
   const box=document.getElementById('wakeRetry');
   if(box) box.innerHTML='서버 연결에 시간이 더 걸리고 있습니다.<br><button onclick="retryWake()">다시 시도</button> <button onclick="wakeDismiss()">닫고 둘러보기</button>';
   storageOK=false;
-  CATALOG_RAW = (typeof EMBEDDED_CATALOG!=='undefined')?EMBEDDED_CATALOG:[];
-  CAT = CATALOG_RAW.map(c=>({...c}));
+  if(!cached){ CATALOG_RAW = (typeof EMBEDDED_CATALOG!=='undefined')?EMBEDDED_CATALOG:[]; CAT = CATALOG_RAW.map(c=>({...c})); }
+  setSaveState('offline');
 }
 async function retryWake(){
   const box=document.getElementById('wakeRetry'); if(box) box.innerHTML='';
@@ -1009,6 +1069,7 @@ function tags(list, max, style){
 function row(c){
   const inCart = CART.some(x=>x.id===c.id);
   const remark = [
+    c.st==='req'?'<span class="badge b-req">#신규신청·검토중</span>':'',
     c.mu==='O'?'<span class="badge b-must">#필수</span>':'',
     c.nw==='O'?'<span class="badge b-new">#신규</span>':'',
     c.rec==='O'?'<span class="badge b-rec">#추천</span>':'',
@@ -1219,7 +1280,7 @@ function clearCart(){ if(!CART.length) return; if(confirm('장바구니를 비�
 async function submitCart(){
   if(!CART.length){ toast('장바구니가 비어 있습니다'); return; }
   const dept = document.getElementById('cartDept').value;
-  const items = CART.map(it=>{ const c=CAT.find(x=>x.id===it.id)||{}; return {id:it.id, name:c.n||it.id, cls:c.cl||'', inst:c.i||'', jg:(c.jg||[]).join('/'), sr:(c.sr||[]).join('/'), hours:c.h||'', people:it.people, quarter:it.quarter, memo:it.memo}; });
+  const items = CART.map(it=>{ const c=CAT.find(x=>x.id===it.id)||{}; return {id:it.id, name:c.n||it.id, cls:c.cl||'', inst:c.i||'', jg:(c.jg||[]).join('/'), sr:(c.sr||[]).join('/'), hours:c.h||'', people:it.people, quarter:it.quarter, memo:it.memo, kind:demandKind(c), yr:c.yr||CUR_YEAR, status:'제출'}; });
   try{ await api('/api/demands', {method:'POST', body:JSON.stringify({dept, planYear:2027, items})}); }
   catch(e){ toast('제출 실패: 서버 연결을 확인하세요'); return; }
   DEMANDS.unshift({dept, ts:new Date().toLocaleString('ko-KR',{hour12:false}), items});
@@ -1241,31 +1302,35 @@ function renderDemand(){
   const depts = [...new Set(rows.map(r=>r.dept))];
   const cur = fd.value;
   fd.innerHTML = '<option value="">전체 부서</option>'+depts.map(d=>`<option ${d===cur?'selected':''}>${esc(d)}</option>`).join('');
-  const show = fd.value?rows.filter(r=>r.dept===fd.value):rows;
+  const fk=(document.getElementById('dFilterKind')||{}).value||'', fs=(document.getElementById('dFilterSt')||{}).value||'';
+  const show = rows.filter(r=>(!fd.value||r.dept===fd.value)&&(!fk||(r.kind||demandKind(CAT.find(c=>c.id===r.id)))===fk)&&(!fs||dStatus(r)===fs));
+  const nNew = show.filter(r=>(r.kind||demandKind(CAT.find(c=>c.id===r.id)))==='신규').length;
   const totP = show.reduce((s,r)=>s+(r.people||0),0);
   document.getElementById('dKpis').innerHTML = `
     <div class="kpi" style="--kc:#0B5BD3"><small>신청 부서</small><b>${depts.length}</b><span>개 부서</span></div>
     <div class="kpi" style="--kc:#F08A00"><small>신청 과정</small><b>${show.length}</b><span>건</span></div>
     <div class="kpi" style="--kc:#0E9F6E"><small>총 신청인원</small><b>${totP.toLocaleString()}</b><span>명</span></div>
-    <div class="kpi" style="--kc:#6D5BD0"><small>제출 횟수</small><b>${DEMANDS.length}</b><span>회</span></div>`;
+    <div class="kpi" style="--kc:#6D5BD0"><small>제출 횟수</small><b>${DEMANDS.length}</b><span>회</span></div>
+    <div class="kpi" style="--kc:#D64545"><small>기존 / 신규</small><b>${show.length-nNew} / ${nNew}</b><span>건</span></div>`;
   document.querySelector('#dTable tbody').innerHTML = show.length?show.map(r=>{
     const instName = r.inst || ((CAT.find(c=>c.id===r.id)||{}).i) || '';
     const home = instHome(instName);
     const instCell = instName ? (home ? `<a href="${esc(home)}" target="_blank" rel="noopener" style="color:var(--khnp);font-weight:600">${esc(instName)} ↗</a>` : `${esc(instName)} <span style="font-size:10px;color:var(--mute)">(홈페이지 미등록)</span>`) : '-';
     return `<tr>
-    <td><b>${esc(r.dept)}</b></td><td>${esc(r.name)}</td><td style="font-size:11.5px">${instCell}</td><td>${esc(r.cls)}</td>
+    <td><b>${esc(r.dept)}</b></td><td>${esc(r.name)}${(CAT.find(c=>c.id===r.id)||{}).st==='req'?' <span class="pill status-n">검토중</span>':''}</td><td>${kindPill(r)}</td><td style="font-size:11.5px">${instCell}</td><td>${esc(r.cls)}</td>
     <td style="font-size:11px;color:var(--mute)">${esc(r.jg)}<br>${esc(r.sr)}</td>
     <td><b>${r.people}</b>명</td><td>${esc(r.quarter)}</td><td>${esc(r.hours)}</td>
     <td style="font-size:11px">${esc(r.memo)}</td><td style="font-size:11px;color:var(--mute)" class="mono">${esc(r.ts)}</td>
+    <td><select class="sbtn" style="padding:2px 6px;font-size:11px" onchange="setDemandState('${esc(dKey(r)).replace(/'/g,"\\'")}',this.value)">${['제출','검토','확정','반려'].map(s=>`<option ${dStatus(r)===s?'selected':''}>${s}</option>`).join('')}</select></td>
     <td><button class="sbtn red" style="padding:3px 8px;font-size:11px" onclick="delDemand(${r.di},${r.ii})">삭제</button></td>
-  </tr>`; }).join(''):'<tr><td colspan="11" style="text-align:center;padding:36px;color:var(--mute)">아직 제출된 교육신청이 없습니다. 스토어에서 과정을 담아 제출해 보세요.</td></tr>';
+  </tr>`; }).join(''):'<tr><td colspan="13" style="text-align:center;padding:36px;color:var(--mute)">아직 제출된 교육신청이 없습니다. 스토어에서 과정을 담아 제출해 보세요.</td></tr>';
 }
 async function delDemand(di,ii){
   DEMANDS[di].items.splice(ii,1);
   if(!DEMANDS[di].items.length) DEMANDS.splice(di,1);
   await saveDemands(); renderDemand(); toast('신청 건을 삭제했습니다');
 }
-function demandRowsForExport(){ return flatDemands().map(r=>{ const inst=r.inst||((CAT.find(c=>c.id===r.id)||{}).i)||''; return {부서:r.dept, 과정명:r.name, 교육기관:inst, 교육기관홈페이지:instHome(inst), 교육분류:r.cls, 직계:r.jg, 직렬:r.sr, 신청인원:r.people, 희망시기:r.quarter, 교육시간:r.hours, 비고:r.memo, 신청일시:r.ts, 과정ID:r.id}; }); }
+function demandRowsForExport(){ return flatDemands().map(r=>{ const inst=r.inst||((CAT.find(c=>c.id===r.id)||{}).i)||''; return {부서:r.dept, 과정명:r.name, 구분:r.kind||demandKind(CAT.find(c=>c.id===r.id)), 상태:dStatus(r), 교육기관:inst, 교육기관홈페이지:instHome(inst), 교육분류:r.cls, 직계:r.jg, 직렬:r.sr, 신청인원:r.people, 희망시기:r.quarter, 교육시간:r.hours, 비고:r.memo, 신청일시:r.ts, 과정ID:r.id}; }); }
 function exportDemandCSV(){ dlCSV(demandRowsForExport(), '교육신청_현황.csv'); }
 function exportDemandXLSX(){
   const rows = demandRowsForExport();
@@ -1287,9 +1352,10 @@ function dlCSV(rows, fname){
 let fmMaps = [];
 let fmCustomHashes = [];
 
-function openForm(id){
+function openForm(id, opts){
+  FM_OPTS = opts||{};
   editingId = id||null;
-  document.getElementById('fmTitle').textContent = id?'과정 정보 수정':'신규 과정 등록';
+  document.getElementById('fmTitle').textContent = id?'과정 정보 수정':(FM_OPTS.request?PLAN_YEAR+'년 신규 교육과정 신청 (검토 후 카탈로그 게시)':'신규 과정 등록');
   fmFillInstList();
   const c = id?CAT.find(x=>x.id===id):null;
   fmFillKB1(c?c.kb1:'');
@@ -1297,7 +1363,7 @@ function openForm(id){
   fmFillKB3(c?c.kb3:'');
   const yrSel=document.getElementById('fm_yr');
   yrSel.innerHTML=YEARS.slice().sort((a,b)=>b-a).map(y=>`<option value="${y}">${y}년</option>`).join('');
-  yrSel.value=String(c?(c.yr||CUR_YEAR):CUR_YEAR);
+  yrSel.value=String(c?(c.yr||CUR_YEAR):(FM_OPTS.request?PLAN_YEAR:CUR_YEAR));
   document.getElementById('fm_n').value = c?c.n:'';
   const clv=c?c.cl:'사내교육';
   document.getElementById('fm_cl').innerHTML=EDU_TYPES.map(t=>`<option ${t===clv?'selected':''}>${esc(t)}</option>`).join('')+((clv&&!EDU_TYPES.includes(clv))?`<option selected value="${esc(clv)}">${esc(clv)} (미등록)</option>`:'');
@@ -1530,36 +1596,39 @@ async function saveForm(){
     mu: fmRemark.mu?'O':'X', nw: fmRemark.nw?'O':'X', rec: fmRemark.rec?'O':'X',
     jg:[...jgS], sr:[...srS], jb:[...jbS] };
   // (역량 마스터는 과정 저장 API가 map의 역량을 자동 반영하므로 전체 saveComps() 호출 안 함 — 속도)
+  data.ref = attachRefs({...data}).ref;   // 참조 ID (기준정보 연계)
   const pub = document.getElementById('fm_pub').value;
   const published = pub!=='hid';
+  const isReq = !!FM_OPTS.request;
   if(editingId){
     const c = CAT.find(x=>x.id===editingId);
-    Object.assign(c, data); c._hidden = !published;
-    busyShow('과정을 저장하는 중입니다…', '서버에 변경 내용을 반영하고 있습니다.');
-    busyProgress(40);
-    try{ await apiSaveCourse({...data, id:editingId, published}, false); }
-    catch(e){ busyHide(); toast('저장 실패: 서버 연결을 확인하세요'); return; }
-    busyProgress(100); busyHide();
+    const backup = JSON.parse(JSON.stringify(c));
+    Object.assign(c, data); c._hidden = !published; delete c._err;
+    // 낙관적 저장: 화면 먼저 반영, 서버 저장은 백그라운드 큐
+    queueSave('course:'+editingId, ()=>apiSaveCourse({...data, id:editingId, published, st:c.st, grp:c.grp}, false),
+      {onFail:()=>{ c._err=true; renderAdmin(); toast('⚠ 저장 실패 — 자동 재시도 중 (데이터관리에서 재시도 가능)'); }});
     log('과정 수정', n);
-    toast('✓ 과정 정보가 수정되어 스토어에 반영되었습니다');
+    toast('✓ 과정 정보가 수정되었습니다 (백그라운드 저장)');
   } else {
-    // 중복 이름 경고 (같은 연도에 동일 과정명이 이미 있으면)
-    const dup = CAT.find(x=>x.n===n && (x.yr||2026)===(parseInt(document.getElementById('fm_yr').value)||CUR_YEAR));
+    const yrV=parseInt(document.getElementById('fm_yr').value)||CUR_YEAR;
+    const dup = CAT.find(x=>x.n===n && (x.yr||2026)===yrV);
     if(dup){
       if(!confirm(`같은 연도에 '${n}' 과정이 이미 있습니다.\n\n[확인] 새 과정으로 추가 · [취소] 중단 후 기존 과정을 수정\n\n기존 과정을 고치려면 취소를 누르고 목록에서 「수정」을 사용하세요.`)){ return; }
     }
     const id = 'NEW_'+Date.now();
-    const c = {id, ...data, grp:id, _hidden:!published};
-    busyShow('과정을 등록하는 중입니다…', '서버에 새 과정을 저장하고 있습니다.');
-    busyProgress(40);
-    try{ await apiSaveCourse({...data, id, grp:id, published}, true); }
-    catch(e){ busyHide(); toast('등록 실패: 서버 연결을 확인하세요'); return; }
-    busyProgress(100); busyHide();
+    const dept=(document.getElementById('deptSel')||{}).value||'';
+    const c = {id, ...data, grp:id, _hidden:!published, st:isReq?'req':'ok', reqDept:isReq?dept:''};
     CAT.push(c);
-    log('과정 등록', n);
-    toast('✓ 신규 과정이 등록되어 스토어에 게시되었습니다');
+    queueSave('course:'+id, ()=>apiSaveCourse({...data, id, grp:id, published, st:c.st, reqDept:c.reqDept}, true),
+      {onFail:()=>{ c._err=true; renderAdmin(); toast('⚠ 등록 실패 — 자동 재시도 중'); }});
+    if(isReq){
+      if(!CART.some(x=>x.id===id)) CART.push({id, people:1, quarter:'1분기', memo:''});
+      log('신규 과정 신청', n+' ('+dept+')');
+      toast('✓ '+yrV+'년 신규 과정으로 신청되어 장바구니에 담겼습니다 — 제출 후 담당 부서 확정 시 카탈로그에 게시됩니다');
+    } else { log('과정 등록', n); toast('✓ 신규 과정이 등록되어 스토어에 게시되었습니다 (백그라운드 저장)'); }
   }
-  closeForm(); render(); renderAdmin(); renderComp&&renderComp();
+  closeForm(); render(); renderCart&&renderCart(); renderAdmin(); renderComp&&renderComp();
+  if(isReq){ openCart(); }
 }
 function setHidden(id, hid){
   const c = CAT.find(x=>x.id===id); if(c) c._hidden = hid;
@@ -1849,8 +1918,10 @@ function renderAdmin(){
     <td style="font-size:11px">${esc(c.p)||'-'}</td>
     <td style="font-size:11px">${[c.mu==='O'?'필수':'',c.nw==='O'?'신규':'',c.rec==='O'?'추천':''].filter(Boolean).join(', ')||'-'}</td>
     <td>${c.lv!==''&&c.lv!=null?'Lv'+esc(c.lv):'-'}</td>
-    <td><span class="pill ${c._hidden?'status-d':'status-s'}">${c._hidden?'숨김':'게시중'}</span></td>
+    <td><span class="pill ${c._hidden?'status-d':'status-s'}">${c._hidden?'숨김':'게시중'}</span>${c.st==='req'?' <span class="pill status-n">신청·검토중</span>':''} <span style="font-size:10px;color:var(--mute)">${c.yr||CUR_YEAR}</span></td>
     <td style="white-space:nowrap">
+      ${c._err?`<button class="sbtn red" style="padding:3px 9px;font-size:11px" onclick="retrySave('${c.id}')">⚠ 저장 실패 · 재시도</button>`:''}
+      <button class="sbtn green" style="padding:3px 9px;font-size:11px" title="다음 연도로 재개설 (대표코드 유지)" onclick="reopenCourse('${c.id}')">↻ ${PLAN_YEAR}</button>
       <button class="sbtn" style="padding:3px 9px;font-size:11px" onclick="openForm('${c.id}')">수정</button>
       <button class="sbtn" style="padding:3px 9px;font-size:11px" onclick="toggleHide('${c.id}')">${c._hidden?'게시':'숨김'}</button>
       <button class="sbtn red" style="padding:3px 9px;font-size:11px" onclick="delCourse('${c.id}')">삭제</button>
@@ -2769,18 +2840,21 @@ function renderFrame(){
     <div class="txitem ${frD===d?'on':''}" onclick="frD='${esc(d)}';frJ=null;renderFrame()">
       <span class="kbdot" style="background:${KB_COLORS[d]||'#5A6B84'}"></span>${esc(d)}
       <span class="ct">${cnt.d[d]||0}</span>
+      <button class="edit" onclick="event.stopPropagation();editKB(1,'${esc(d)}')">수정</button>
       <button class="del" onclick="event.stopPropagation();delKB(1,'${esc(d)}')">삭제</button>
     </div>`).join('')||'<div class="txempty">대분류가 없습니다</div>';
   const js=frD?Object.keys(KTREE[frD]):[];
   document.getElementById('frJ').innerHTML = !frD?'<div class="txempty">대분류를 선택하세요</div>':(js.length?js.map(j=>`
     <div class="txitem ${frJ===j?'on':''}" onclick="frJ='${esc(j)}';renderFrame()">${esc(j)}
       <span class="ct">${cnt.j[frD+'|'+j]||0}</span>
+      <button class="edit" onclick="event.stopPropagation();editKB(2,'${esc(j)}')">수정</button>
       <button class="del" onclick="event.stopPropagation();delKB(2,'${esc(j)}')">삭제</button>
     </div>`).join(''):'<div class="txempty">중분류가 없습니다<br>「＋ 추가」로 등록</div>');
   const ss=(frD&&frJ)?(KTREE[frD][frJ]||[]):[];
   document.getElementById('frS').innerHTML = !(frD&&frJ)?'<div class="txempty">중분류를 선택하세요</div>':(ss.length?ss.map(s=>`
     <div class="txitem">${esc(s)}
       <span class="ct">${cnt.s[frD+'|'+frJ+'|'+s]||0}</span>
+      <button class="edit" onclick="event.stopPropagation();editKB(3,'${esc(s)}')">수정</button>
       <button class="del" onclick="event.stopPropagation();delKB(3,'${esc(s)}')">삭제</button>
     </div>`).join(''):'<div class="txempty">소분류가 없습니다<br>「＋ 추가」로 등록</div>');
   document.getElementById('stTag5').innerHTML = storageOK
@@ -2879,6 +2953,7 @@ function showTab(t){
   document.getElementById('v-inst').style.display = t==='inst'?'block':'none';
   document.getElementById('v-comp').style.display = t==='comp'?'block':'none';
   document.getElementById('v-admin').style.display = t==='admin'?'block':'none';
+  document.getElementById('v-hist').style.display = t==='hist'?'block':'none';
   if(t==='demand') renderDemand();
   if(t==='yearcmp') renderYearCmp();
   if(t==='tax') renderTax();
@@ -2886,6 +2961,7 @@ function showTab(t){
   if(t==='inst') renderInst();
   if(t==='comp') renderComp();
   if(t==='admin') renderAdmin();
+  if(t==='hist') renderHist();
 }
 document.getElementById('q').addEventListener('input', e=>{ F.q=e.target.value; const s=document.getElementById('qStore'); if(s)s.value=e.target.value; render(); });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){
@@ -2906,6 +2982,362 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape'){
   await initStorage();      // 서버에서 로드 (실패 시 내장 폴백)
   render(); renderCart();
 })();
+
+/* ======================================================================
+   v6 확장 모듈 — 참조ID 연계 · 기준정보 이력(Effective Dating) · 신청관리 · 저장 큐
+   ====================================================================== */
+const PLAN_YEAR = CUR_YEAR + 1;           // 신청 대상 연도 (2027)
+let FM_OPTS = {};                         // 과정 등록 폼 모드 ({request:true} = 신청 화면에서 신규 신청)
+let KV = {};                              // 서버 key-value (refmap / seals / inactive / dstate) — 서버 미지원 시 localStorage 미러
+let HIST = [];                            // 기준정보 변경 이력 (필드 단위)
+let REF = {jt:{}, kt:{}, cp:{}, seq:{jt:0, kt:0, cp:0}};   // 경로 → 안정 ID
+let INACTIVE = {tax:[], frame:[], inst:[], comp:[]};        // 폐지(비활성) 처리된 기준정보
+let DSTATE = {};                          // 신청 건 상태: dept|ts|courseId → 제출/검토/확정/반려
+let SEALS = {};                           // 연도별 확정 스냅샷
+let HIST_YEAR = new Date().getFullYear(); // 이력의 "적용 연도" 기본값
+let saveTimerLabel = null;
+
+/* ---------------------- 0. 로컬 미러 (서버 미지원 항목 폴백) ---------------------- */
+function lsGet(k, d){ try{ const v=localStorage.getItem('khnp6:'+k); return v?JSON.parse(v):d; }catch(e){ return d; } }
+function lsSet(k, v){ try{ localStorage.setItem('khnp6:'+k, JSON.stringify(v)); }catch(e){} }
+
+/* ---------------------- 1. 저장 큐 (코얼레싱 · 백그라운드 · 재시도) ---------------------- */
+const SQ = { pending:{}, timer:null, inflight:0, failed:{}, lastOk:null, retryMs:3000 };
+function setSaveState(st, msg){
+  const el=document.getElementById('saveState'); if(!el) return;
+  const map={ idle:['', ''], dirty:['st-dirty','● 변경됨 — 저장 대기'], saving:['st-saving','↻ 저장 중…'],
+    ok:['st-ok','✓ 저장됨 '+(SQ.lastOk?SQ.lastOk.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}):'')],
+    error:['st-err','⚠ 저장 실패 — 자동 재시도'], offline:['st-off','● 서버 미연결 (읽기 전용)'] };
+  const m=map[st]||map.idle; el.className='save-state '+m[0]; el.textContent=msg||m[1];
+}
+/* key 가 같은 저장은 마지막 것만 전송 (전체 저장 남발 방지). soft=true 면 실패해도 조용히 로컬만 유지 */
+function queueSave(key, fn, opt){
+  opt=opt||{};
+  SQ.pending[key]={fn, opt};
+  if(!storageOK){ setSaveState('offline','● 서버 미연결 — 재연결되면 자동 저장'); }
+  else setSaveState('dirty');
+  clearTimeout(SQ.timer); SQ.timer=setTimeout(flushSaves, opt.delay||400);
+}
+async function flushSaves(){
+  const jobs=Object.entries(SQ.pending); SQ.pending={};
+  if(!jobs.length) return;
+  SQ.inflight+=jobs.length; setSaveState('saving');
+  await Promise.all(jobs.map(async ([k,j])=>{
+    try{ await j.fn(); delete SQ.failed[k]; if(j.opt.onOk) j.opt.onOk(); }
+    catch(e){
+      if(j.opt.soft){ console.warn('soft save skipped', k, e.message); return; }
+      SQ.failed[k]=j; if(j.opt.onFail) j.opt.onFail(e);
+    }
+  }));
+  SQ.inflight-=jobs.length;
+  if(Object.keys(SQ.failed).length){
+    setSaveState('error');
+    setTimeout(()=>{ Object.entries(SQ.failed).forEach(([k,j])=>{ SQ.pending[k]=j; }); SQ.failed={}; SQ.retryMs=Math.min(SQ.retryMs*1.6, 30000); flushSaves(); }, SQ.retryMs);
+  } else { SQ.retryMs=3000; SQ.lastOk=new Date(); setSaveState(Object.keys(SQ.pending).length?'dirty':'ok'); }
+}
+window.addEventListener('beforeunload', e=>{ if(Object.keys(SQ.pending).length||SQ.inflight||Object.keys(SQ.failed).length){ e.preventDefault(); e.returnValue=''; } });
+/* 서버 절전 방지 핑 (5분) — 화면이 보일 때만 */
+setInterval(()=>{ if(document.visibilityState==='visible') fetch(API_BASE+'/api/health',{cache:'no-store'}).catch(()=>fetch(API_BASE+'/',{mode:'no-cors',cache:'no-store'}).catch(()=>{})); }, 5*60*1000);
+
+/* 컬렉션 저장을 큐로 교체 (호출부는 그대로 await 가능 — 즉시 반환) */
+saveTax   = async function(){ if(!storageOK) return; queueSave('tax',   ()=>api('/api/sync/taxonomy',     {method:'PUT', body:JSON.stringify({tree:TAX})})); };
+saveKtree = async function(){ if(!storageOK) return; queueSave('ktree', ()=>api('/api/sync/framework',    {method:'PUT', body:JSON.stringify({tree:KTREE})})); };
+saveComps = async function(){ if(!storageOK) return; queueSave('comps', ()=>api('/api/sync/competencies', {method:'PUT', body:JSON.stringify({rows:COMPS})})); };
+saveInsts = async function(){ if(!storageOK) return; queueSave('insts', ()=>api('/api/sync/institutions', {method:'PUT', body:JSON.stringify({rows:INSTS})})); };
+/* 변경된 과정 여러 건 → 개별 PUT 반복 대신 bulk 1회 */
+bulkSaveChanged = async function(list){
+  if(!storageOK||!list.length) return;
+  const items=list.map(c=>({...c, published:!c._hidden}));
+  queueSave('courses:bulk:'+Date.now(), async ()=>{ for(let i=0;i<items.length;i+=300) await api('/api/courses/bulk',{method:'POST', body:JSON.stringify({items:items.slice(i,i+300)})}); });
+};
+/* key-value 저장 (서버 → 실패 시 로컬만) */
+function kvSave(key, val){
+  KV[key]=val; lsSet('kv:'+key, val);
+  if(storageOK) queueSave('kv:'+key, ()=>api('/api/sync/kv/'+encodeURIComponent(key), {method:'PUT', body:JSON.stringify({value:val})}), {soft:true});
+}
+function kvLoad(key, d){ return (KV && KV[key]!==undefined) ? KV[key] : lsGet('kv:'+key, d); }
+
+/* ---------------------- 2. IndexedDB 캐시 (즉시 표시 → 서버 동기화) ---------------------- */
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open('khnp-edu',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function idbGet(k){ try{ const db=await idb(); return await new Promise((res,rej)=>{ const t=db.transaction('kv').objectStore('kv').get(k); t.onsuccess=()=>res(t.result); t.onerror=()=>rej(t.error); }); }catch(e){ return null; } }
+async function idbSet(k,v){ try{ const db=await idb(); await new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite').objectStore('kv').put(v,k); t.onsuccess=res; t.onerror=()=>rej(t.error); }); }catch(e){} }
+
+/* ---------------------- 3. 참조 ID 레이어 (이름은 캐시, ID가 원본) ---------------------- */
+function refId(kind, path){
+  if(!path) return '';
+  if(!REF[kind][path]){ REF[kind][path]=kind.toUpperCase()+'-'+String(++REF.seq[kind]).padStart(5,'0'); REF._dirty=true; }
+  return REF[kind][path];
+}
+function refRename(kind, oldPath, newPath){
+  Object.keys(REF[kind]).forEach(p=>{ if(p===oldPath||p.startsWith(oldPath+'>')){ const np=newPath+p.slice(oldPath.length); REF[kind][np]=REF[kind][p]; delete REF[kind][p]; } });
+  REF._dirty=true;
+}
+function refPathOf(kind, id){ return Object.keys(REF[kind]).find(p=>REF[kind][p]===id)||''; }
+function attachRefs(c){
+  c.ref = {
+    jt:(c.map||[]).map(m=>refId('jt',[m[0],m[1],m[2]].filter(Boolean).join('>'))),
+    kt:refId('kt',[c.kb1,c.kb2,c.kb3].filter(Boolean).join('>')),
+    inst:c.icd||(findInst(c.i)||{}).code||'',
+    cp:(c.cp||[]).map(n=>refId('cp',n))
+  };
+  return c;
+}
+function attachAllRefs(){ CAT.forEach(attachRefs); if(REF._dirty){ delete REF._dirty; kvSave('refmap', REF); } }
+/* ID 기준으로 과정의 이름 캐시를 다시 채움 → 이름이 바뀐 과정만 반환 */
+function rehydrateFromRefs(){
+  const changed=[];
+  CAT.forEach(c=>{
+    if(!c.ref) return;
+    const before=JSON.stringify([c.kb1,c.kb2,c.kb3,c.i,c.map]);
+    const kp=refPathOf('kt', c.ref.kt); if(kp){ const s=kp.split('>'); c.kb1=s[0]||''; c.kb2=s[1]||''; c.kb3=s[2]||''; }
+    if(c.ref.inst){ const ins=INSTS.find(x=>x.code===c.ref.inst); if(ins){ c.i=ins.name; c.icd=ins.code; } }
+    (c.map||[]).forEach((m,i)=>{ const p=refPathOf('jt', c.ref.jt[i]); if(p){ const s=p.split('>'); m[0]=s[0]||''; m[1]=s[1]||''; m[2]=s[2]||''; } });
+    c.jg=[...new Set((c.map||[]).map(m=>m[0]).filter(Boolean))]; c.sr=[...new Set((c.map||[]).map(m=>m[1]).filter(Boolean))]; c.jb=[...new Set((c.map||[]).map(m=>m[2]).filter(Boolean))];
+    if(JSON.stringify([c.kb1,c.kb2,c.kb3,c.i,c.map])!==before) changed.push(c);
+  });
+  return changed;
+}
+/* 폐지(비활성) 처리 */
+function inactiveHas(kind, path){ return !!path && (INACTIVE[kind]||[]).includes(path); }
+function setInactive(kind, path, on){
+  INACTIVE[kind]=(INACTIVE[kind]||[]).filter(p=>p!==path); if(on) INACTIVE[kind].push(path);
+  kvSave('inactive', INACTIVE);
+  histPush(kind, on?'폐지':'폐지해제', path, on?'활성':'폐지', on?'폐지':'활성');
+}
+function markInactiveDOM(){
+  [['txJG','tax',p=>p],['txSR','tax',p=>txJG+'>'+p],['txJB','tax',p=>txJG+'>'+txSR+'>'+p],
+   ['frD','frame',p=>p],['frJ','frame',p=>frD+'>'+p],['frS','frame',p=>frD+'>'+frJ+'>'+p]].forEach(([id,kind,fn])=>{
+    const box=document.getElementById(id); if(!box) return;
+    box.querySelectorAll('.txitem').forEach(el=>{
+      const tn=[...el.childNodes].find(n=>n.nodeType===3&&n.textContent.trim()); const name=tn?tn.textContent.trim():'';
+      if(!name) return;
+      const path=fn(name);
+      if(inactiveHas(kind, path)){
+        el.style.opacity='.55';
+        const b=document.createElement('button'); b.className='edit'; b.textContent='폐지됨 · 복원'; b.title='폐지된 항목입니다. 클릭하면 다시 활성화합니다';
+        b.onclick=e=>{ e.stopPropagation(); setInactive(kind,path,false); (kind==='tax'?renderTax:renderFrame)(); toast('✓ 다시 활성화되었습니다'); };
+        el.appendChild(b);
+      }
+    });
+  });
+}
+{ const _rt=renderTax, _rf=renderFrame; renderTax=function(){ _rt(); markInactiveDOM(); }; renderFrame=function(){ _rf(); markInactiveDOM(); }; }
+/* 연계 과정이 있으면 삭제 대신 폐지 */
+function linkedCourses(kind, path){
+  const s=path.split('>');
+  if(kind==='tax') return CAT.filter(c=>(c.map||[]).some(m=>m[0]===s[0]&&(s.length<2||m[1]===s[1])&&(s.length<3||m[2]===s[2])));
+  if(kind==='frame') return CAT.filter(c=>c.kb1===s[0]&&(s.length<2||c.kb2===s[1])&&(s.length<3||c.kb3===s[2]));
+  return [];
+}
+function guardDel(kind, pathFn, orig){
+  return async function(){
+    const path=pathFn.apply(null, arguments); const n=linkedCourses(kind, path).length;
+    if(n>0){
+      if(confirm(`「${path}」에 연계된 과정이 ${n}건 있습니다.\n\n연계 과정이 있는 기준정보는 삭제하지 않고 「폐지」 처리합니다 (과정에는 ⚠ 재매핑 필요 표시).\n\n[확인] 폐지 처리   [취소] 중단`)){
+        setInactive(kind, path, true); (kind==='tax'?renderTax:renderFrame)(); render(); renderAdmin(); toast('✓ 폐지 처리되었습니다 — 연계 과정 '+n+'건은 재매핑 대상으로 표시됩니다');
+      }
+      return;
+    }
+    return orig.apply(this, arguments);
+  };
+}
+delJG = guardDel('tax', j=>j, delJG);
+delSR = guardDel('tax', s=>txJG+'>'+s, delSR);
+delJB = guardDel('tax', j=>txJG+'>'+txSR+'>'+j, delJB);
+delKB = guardDel('frame', (lvl,v)=>lvl===1?v:lvl===2?frD+'>'+v:frD+'>'+frJ+'>'+v, delKB);
+{ const _cai=courseAlignIssues; courseAlignIssues=function(c){ const b=_cai(c);
+  (c.map||[]).forEach(m=>{ if(inactiveHas('tax',m[0])||inactiveHas('tax',m[0]+'>'+m[1])||inactiveHas('tax',[m[0],m[1],m[2]].join('>'))) b.push('폐지된 직무체계'); });
+  if(inactiveHas('frame',c.kb1)||inactiveHas('frame',c.kb1+'>'+c.kb2)||inactiveHas('frame',[c.kb1,c.kb2,c.kb3].join('>'))) b.push('폐지된 교육체계');
+  return [...new Set(b)]; }; }
+
+/* 교육체계 이름 수정 (기존에 없던 기능) — ID 유지 + 연계 과정 자동 반영 */
+async function editKB(lvl, val){
+  const nv=(prompt(['','대분류','중분류','소분류'][lvl]+'명을 수정하세요', val)||'').trim(); if(!nv||nv===val) return;
+  let oldPath, newPath;
+  if(lvl===1){ if(KTREE[nv]){toast('이미 존재');return;} const nt={}; Object.keys(KTREE).forEach(k=>nt[k===val?nv:k]=KTREE[k]); KTREE=nt; if(frD===val) frD=nv; oldPath=val; newPath=nv; }
+  else if(lvl===2){ if(KTREE[frD][nv]){toast('이미 존재');return;} const no={}; Object.keys(KTREE[frD]).forEach(k=>no[k===val?nv:k]=KTREE[frD][k]); KTREE[frD]=no; if(frJ===val) frJ=nv; oldPath=frD+'>'+val; newPath=frD+'>'+nv; }
+  else { if(KTREE[frD][frJ].includes(nv)){toast('이미 존재');return;} KTREE[frD][frJ]=KTREE[frD][frJ].map(x=>x===val?nv:x); oldPath=frD+'>'+frJ+'>'+val; newPath=frD+'>'+frJ+'>'+nv; }
+  refRename('kt', oldPath, newPath); kvSave('refmap', REF);
+  const changed=rehydrateFromRefs();
+  await saveKtree(); bulkSaveChanged(changed);
+  histPush('frame','수정', newPath, oldPath.split('>').pop(), nv);
+  log('교육체계 수정', oldPath+' → '+nv); renderFrame(); render(); renderAdmin();
+  toast(`✓ 수정되었습니다 (연계 과정 ${changed.length}건 자동 반영)`);
+}
+/* 직무체계 수정 시 참조ID도 함께 이동 */
+{ const _e1=editJG, _e2=editSR, _e3=editJB;
+  editJG=async function(j){ const before=Object.keys(TAX); await _e1(j); const nv=Object.keys(TAX).find(k=>!before.includes(k)); if(nv){ refRename('jt', j, nv); kvSave('refmap', REF); } };
+  editSR=async function(s){ const jg=txJG, before=Object.keys(TAX[jg]||{}); await _e2(s); const nv=Object.keys(TAX[jg]||{}).find(k=>!before.includes(k)); if(nv){ refRename('jt', jg+'>'+s, jg+'>'+nv); kvSave('refmap', REF); } };
+  editJB=async function(j){ const jg=txJG, sr=txSR, before=(TAX[jg]||{})[sr]||[]; await _e3(j); const nv=((TAX[jg]||{})[sr]||[]).find(k=>!before.includes(k)); if(nv){ refRename('jt', [jg,sr,j].join('>'), [jg,sr,nv].join('>')); kvSave('refmap', REF); } };
+}
+/* 교육기관명 변경 → 기관ID(icd)로 연결된 과정에 자동 반영 */
+function instPropagate(beforeMap){
+  const changed=[];
+  INSTS.forEach(x=>{ if(!x.code) return; const old=beforeMap[x.code]; if(old && old!==x.name){ CAT.forEach(c=>{ if(c.icd===x.code || (!c.icd && c.i===old)){ c.i=x.name; c.icd=x.code; changed.push(c); } }); } });
+  if(changed.length){ bulkSaveChanged(changed); render(); renderAdmin(); toast(`✓ 교육기관명 변경이 연계 과정 ${changed.length}건에 자동 반영되었습니다`); }
+}
+{ const _sf=saveInstForm, _sg=saveInstGrid;
+  const snap=()=>{ const m={}; INSTS.forEach(x=>{ if(x.code) m[x.code]=x.name; }); return m; };
+  saveInstForm=async function(){ const b=snap(); await _sf(); instPropagate(b); };
+  saveInstGrid=async function(){ const b=snap(); await _sg(); instPropagate(b); };
+}
+
+/* ---------------------- 4. 기준정보 변경 이력 (필드 단위 · 적용연도) ---------------------- */
+function masterFlat(kind){
+  const m={};
+  if(kind==='tax'){ Object.keys(TAX).forEach(jg=>{ m[jg]=''; Object.keys(TAX[jg]).forEach(sr=>{ m[jg+'>'+sr]=''; (TAX[jg][sr]||[]).forEach(jb=>{ m[jg+'>'+sr+'>'+jb]=''; }); }); }); }
+  else if(kind==='frame'){ Object.keys(KTREE).forEach(d=>{ m[d]=''; Object.keys(KTREE[d]).forEach(j=>{ m[d+'>'+j]=''; (KTREE[d][j]||[]).forEach(s=>{ m[d+'>'+j+'>'+s]=''; }); }); }); }
+  else if(kind==='inst'){ INSTS.forEach(x=>{ m[x.code||('name:'+x.name)]=[x.name,x.biz,x.addr,x.tel,x.home,x.memo].map(v=>v||'').join(' | '); }); }
+  else if(kind==='comp'){ COMPS.forEach(x=>{ m[[x.jg,x.sr,x.jb,'Lv'+x.lv,x.name].join('>')]=''; }); }
+  else if(kind==='edu'){ EDU_TYPES.forEach(t=>m['교육분류>'+t]=''); EDU_METHODS.forEach(t=>m['교육방법>'+t]=''); }
+  return m;
+}
+const KIND_LABEL={tax:'직무체계', frame:'교육체계', inst:'교육기관', comp:'역량', edu:'교육분류·방법'};
+function histPush(kind, op, path, before, after){
+  const e={ id:'H'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:new Date().toISOString(), yr:HIST_YEAR, kind, op, path, before:before??'', after:after??'',
+    by:(document.getElementById('deptSel')||{}).value||'' };
+  HIST.unshift(e); lsSet('hist', HIST.slice(0,5000));
+  if(storageOK) queueSave('hist:'+e.id, ()=>api('/api/sync/history',{method:'POST', body:JSON.stringify({entries:[e]})}), {soft:true});
+  return e;
+}
+function recordDiff(kind, before, after){
+  const removed=Object.keys(before).filter(k=>!(k in after));
+  const added=Object.keys(after).filter(k=>!(k in before));
+  const parent=p=>p.split('>').slice(0,-1).join('>');
+  const usedAdd=new Set();
+  removed.forEach(r=>{
+    const cand=added.filter(a=>!usedAdd.has(a)&&parent(a)===parent(r)&&a.split('>').length===r.split('>').length);
+    if(cand.length===1 && removed.filter(x=>parent(x)===parent(r)&&x.split('>').length===r.split('>').length).length===1){
+      usedAdd.add(cand[0]); histPush(kind,'수정',cand[0], r.split('>').pop(), cand[0].split('>').pop());
+    } else histPush(kind,'삭제',r, r.split('>').pop(), '');
+  });
+  added.filter(a=>!usedAdd.has(a)).forEach(a=>histPush(kind,'추가',a,'',a.split('>').pop()));
+  Object.keys(after).forEach(k=>{ if(k in before && before[k]!==after[k]) histPush(kind,'수정',k,before[k],after[k]); });
+}
+function withHistory(kind, fn){ return async function(){ const b=masterFlat(kind); const r=await fn.apply(this, arguments); recordDiff(kind, b, masterFlat(kind)); if(typeof renderHist==='function' && document.getElementById('v-hist').style.display!=='none') renderHist(); return r; }; }
+[['tax',['addJG','addSR','addJB','delJG','delSR','delJB','editJG','editSR','editJB','resetTax']],
+ ['frame',['addKB','delKB','editKB','resetFrame']],
+ ['inst',['saveInstForm','delInst','saveInstGrid','instBulkImport','doInstFix']],
+ ['comp',['saveCompForm','delComp','saveCompGrid']],
+ ['edu',['addEduType','editEduType','delEduType','addEduMethod','editEduMethod','delEduMethod']]
+].forEach(([kind,names])=>names.forEach(n=>{ if(typeof window[n]==='function') window[n]=withHistory(kind, window[n]); }));
+
+/* 연도별 확정 스냅샷 */
+function sealYear(yr){
+  yr=yr||HIST_YEAR;
+  if(SEALS[yr] && !confirm(yr+'년 기준정보는 이미 확정되어 있습니다. 현재 상태로 다시 확정(덮어쓰기)할까요?')) return;
+  SEALS[yr]={ ts:new Date().toISOString(), tax:JSON.parse(JSON.stringify(TAX)), ktree:JSON.parse(JSON.stringify(KTREE)), insts:JSON.parse(JSON.stringify(INSTS)), comps:JSON.parse(JSON.stringify(COMPS)), eduTypes:EDU_TYPES.slice(), eduMethods:EDU_METHODS.slice(), inactive:JSON.parse(JSON.stringify(INACTIVE)), by:(document.getElementById('deptSel')||{}).value||'' };
+  kvSave('seals', SEALS); histPush('tax','확정', yr+'년 기준정보 스냅샷','', '직무체계·교육체계·교육기관·역량');
+  log('기준정보 연도 확정', yr+'년'); renderHist(); toast('🔒 '+yr+'년 기준정보가 확정(봉인)되었습니다');
+}
+function flatFromSeal(kind, s){
+  const save=[TAX,KTREE,INSTS,COMPS,EDU_TYPES,EDU_METHODS];
+  TAX=s.tax; KTREE=s.ktree; INSTS=s.insts; COMPS=s.comps; EDU_TYPES=s.eduTypes; EDU_METHODS=s.eduMethods;
+  const f=masterFlat(kind); [TAX,KTREE,INSTS,COMPS,EDU_TYPES,EDU_METHODS]=save; return f;
+}
+function sealDiffHTML(yr){
+  const s=SEALS[yr]; if(!s) return '';
+  return ['tax','frame','inst','comp','edu'].map(kind=>{
+    const a=flatFromSeal(kind,s), b=masterFlat(kind);
+    const removed=Object.keys(a).filter(k=>!(k in b)), added=Object.keys(b).filter(k=>!(k in a)), mod=Object.keys(b).filter(k=>k in a&&a[k]!==b[k]);
+    if(!removed.length&&!added.length&&!mod.length) return `<div class="hd-row"><b>${KIND_LABEL[kind]}</b><span class="hd-same">변경 없음</span></div>`;
+    const li=(arr,cls,sym)=>arr.slice(0,40).map(p=>`<div class="hd-item ${cls}">${sym} ${esc(p)}</div>`).join('')+(arr.length>40?`<div class="hd-item">… 외 ${arr.length-40}건</div>`:'');
+    return `<div class="hd-row"><b>${KIND_LABEL[kind]}</b><span class="hd-cnt">+${added.length} / −${removed.length} / ✎${mod.length}</span>${li(added,'add','＋')}${li(removed,'rem','－')}${li(mod,'mod','✎')}</div>`;
+  }).join('');
+}
+let histF={kind:'', yr:'', q:''}, histDiffYear=null;
+function renderHist(){
+  const yrs=YEARS.slice().sort((a,b)=>b-a);
+  const ys=document.getElementById('hsYear'); if(ys){ ys.innerHTML=yrs.map(y=>`<option value="${y}" ${y===HIST_YEAR?'selected':''}>${y}년</option>`).join(''); }
+  const kpi=document.getElementById('hsKpis');
+  const thisYr=HIST.filter(h=>h.yr===HIST_YEAR).length, nIn=Object.values(INACTIVE).reduce((s,a)=>s+a.length,0);
+  kpi.innerHTML=`
+    <div class="kpi" style="--kc:#0B5BD3"><small>변경 이력 (누적)</small><b>${HIST.length.toLocaleString()}</b><span>건</span></div>
+    <div class="kpi" style="--kc:#F08A00"><small>${HIST_YEAR}년 적용 변경</small><b>${thisYr}</b><span>건</span></div>
+    <div class="kpi" style="--kc:#0E9F6E"><small>확정된 연도</small><b>${Object.keys(SEALS).length}</b><span>개 (${Object.keys(SEALS).sort().join(', ')||'없음'})</span></div>
+    <div class="kpi" style="--kc:#D64545"><small>폐지 항목</small><b>${nIn}</b><span>건 (재매핑 대상)</span></div>`;
+  const sl=document.getElementById('hsSeals');
+  const sealed=Object.keys(SEALS).sort((a,b)=>b-a);
+  sl.innerHTML = sealed.length ? sealed.map(y=>{ const s=SEALS[y]; return `<div class="seal-row">
+      <span class="pill status-s">🔒 ${y}년 확정</span>
+      <span style="font-size:11.5px;color:var(--mute)">${new Date(s.ts).toLocaleString('ko-KR',{hour12:false})} · ${esc(s.by||'')} · 직계 ${Object.keys(s.tax).length} / 대분류 ${Object.keys(s.ktree).length} / 기관 ${s.insts.length} / 역량 ${s.comps.length}</span>
+      <span class="sp"><button class="sbtn" onclick="histDiffYear=${histDiffYear==y?'null':y};renderHist()">${histDiffYear==y?'비교 닫기':'현재와 비교'}</button>
+      <button class="sbtn blue" onclick="exportSealJSON(${y})">JSON</button></span></div>` + (histDiffYear==y?`<div class="hd-box">${sealDiffHTML(y)}</div>`:''); }).join('')
+    : '<div class="txempty">확정된 연도가 없습니다. 연말에 「이 연도 기준정보 확정」을 누르면 그 시점의 직무체계·교육체계·교육기관·역량이 봉인되어 언제든 현재와 비교할 수 있습니다.</div>';
+  const rows=HIST.filter(h=>(!histF.kind||h.kind===histF.kind)&&(!histF.yr||String(h.yr)===histF.yr)&&(!histF.q||(h.path+' '+h.before+' '+h.after).toLowerCase().includes(histF.q)));
+  const OPC={추가:'status-s',삭제:'status-d',수정:'status-n',폐지:'status-d',폐지해제:'status-s',확정:'status-n'};
+  document.querySelector('#hsTable tbody').innerHTML = rows.slice(0,400).map(h=>`<tr>
+    <td class="mono" style="font-size:11px;white-space:nowrap">${esc(new Date(h.ts).toLocaleString('ko-KR',{hour12:false}))}</td>
+    <td><b>${h.yr}</b></td><td>${esc(KIND_LABEL[h.kind]||h.kind)}</td>
+    <td><span class="pill ${OPC[h.op]||''}">${esc(h.op)}</span></td>
+    <td style="font-size:12px">${esc(h.path)}</td>
+    <td style="font-size:11.5px;color:var(--mute)">${esc(h.before)}</td><td style="font-size:11.5px">${esc(h.after)}</td>
+    <td style="font-size:11px;color:var(--mute)">${esc(h.by||'')}</td></tr>`).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--mute)">이력이 없습니다. 기준정보를 추가·수정·삭제·폐지하면 필드 단위로 자동 기록됩니다.</td></tr>';
+  document.getElementById('hsShown').textContent=Math.min(rows.length,400)+' / '+rows.length;
+}
+function exportHistCSV(){ dlCSV(HIST.map(h=>({시각:new Date(h.ts).toLocaleString('ko-KR',{hour12:false}), 적용연도:h.yr, 종류:KIND_LABEL[h.kind]||h.kind, 작업:h.op, 항목:h.path, 변경전:h.before, 변경후:h.after, 작업부서:h.by||''})),'기준정보_변경이력.csv'); }
+function exportSealJSON(y){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(SEALS[y],null,1)],{type:'application/json'})); a.download='기준정보_'+y+'년_확정.json'; a.click(); }
+
+/* ---------------------- 5. 교육과정 신청 관리 (기존/신규 · 재개설 · 상태) ---------------------- */
+function demandKind(c){
+  if(!c) return '기존';
+  const yr=c.yr||CUR_YEAR, g=c.grp||c.id;
+  if(yr<PLAN_YEAR) return '기존';
+  return CAT.some(x=>x.id!==c.id && (x.grp||x.id)===g && (x.yr||CUR_YEAR)<yr) ? '기존' : '신규';
+}
+function kindPill(r){ const k=r.kind||demandKind(CAT.find(c=>c.id===r.id)); return `<span class="pill ${k==='신규'?'status-n':'status-s'}">${k}</span>`; }
+function dKey(r){ return r.dept+'|'+r.ts+'|'+r.id; }
+function dStatus(r){ return DSTATE[dKey(r)]||r.status||'제출'; }
+function setDemandState(key, val){
+  DSTATE[key]=val; kvSave('dstate', DSTATE);
+  const id=key.split('|').pop(); const c=CAT.find(x=>x.id===id);
+  if(c && c.st==='req' && val==='확정'){ c.st='ok'; queueSave('course:'+c.id, ()=>apiSaveCourse({...c, published:!c._hidden}, false)); log('신규 신청 과정 확정', c.n); render(); }
+  if(c && c.st==='ok' && val==='반려'){ c.st='req'; queueSave('course:'+c.id, ()=>apiSaveCourse({...c, published:!c._hidden}, false)); }
+  renderDemand(); toast('상태: '+val);
+}
+function openRequestForm(){ openForm(null, {request:true}); }
+/* 기존 과정을 다음 연도로 재개설 (대표코드 유지 → "기존"으로 분류) */
+function reopenClone(c, yr){
+  const id='NEW_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+  const n={...JSON.parse(JSON.stringify(c)), id, yr, grp:c.grp||c.id, nw:'X', st:'ok', _hidden:false, reopenedFrom:c.id};
+  delete n._err; delete n.reqDept; return n;
+}
+async function reopenCourse(id, yr){
+  yr=yr||PLAN_YEAR; const c=CAT.find(x=>x.id===id); if(!c) return;
+  const g=c.grp||c.id;
+  if(CAT.some(x=>(x.grp||x.id)===g && (x.yr||CUR_YEAR)===yr)){ toast(yr+'년에 이미 개설된 과정입니다'); return; }
+  if(!confirm(`'${c.n}' 과정을 ${yr}년에 재개설할까요?\n(대표코드 유지 → 신청 시 「기존」으로 분류)`)) return;
+  const n=reopenClone(c, yr); attachRefs(n); CAT.push(n);
+  queueSave('course:'+n.id, ()=>apiSaveCourse({...n, published:true}, true), {onFail:()=>{ n._err=true; renderAdmin(); }});
+  log('과정 재개설', c.n+' → '+yr+'년'); render(); renderAdmin(); toast('✓ '+yr+'년에 재개설되었습니다');
+}
+async function reopenFiltered(yr){
+  yr=yr||PLAN_YEAR;
+  const src=acFilteredCourses().filter(c=>(c.yr||CUR_YEAR)<yr && !c._hidden);
+  const have=new Set(CAT.filter(x=>(x.yr||CUR_YEAR)===yr).map(x=>x.grp||x.id));
+  const todo=src.filter(c=>!have.has(c.grp||c.id));
+  if(!todo.length){ toast('재개설할 과정이 없습니다 (이미 '+yr+'년에 개설됨)'); return; }
+  if(!confirm(`현재 필터의 과정 ${todo.length}건을 ${yr}년으로 일괄 재개설할까요?\n(대표코드 유지 · 신청 시 「기존」 분류)`)) return;
+  const clones=todo.map(c=>{ const n=reopenClone(c, yr); attachRefs(n); CAT.push(n); return n; });
+  bulkSaveChanged(clones); log('과정 일괄 재개설', todo.length+'건 → '+yr+'년');
+  render(); renderAdmin(); toast('✓ '+clones.length+'건이 '+yr+'년으로 재개설되었습니다');
+}
+function retrySave(id){ const c=CAT.find(x=>x.id===id); if(!c) return; delete c._err; queueSave('course:'+id, ()=>apiSaveCourse({...c, published:!c._hidden}, String(id).startsWith('NEW_')), {onFail:()=>{ c._err=true; renderAdmin(); }, onOk:()=>renderAdmin()}); renderAdmin(); }
+
+/* ---------------------- 6. 부트스트랩 후 초기화 ---------------------- */
+function afterBootstrap(){
+  KV = KV||{};
+  REF = kvLoad('refmap', REF) || REF; if(!REF.seq) REF.seq={jt:0,kt:0,cp:0};
+  INACTIVE = kvLoad('inactive', INACTIVE) || INACTIVE;
+  DSTATE = kvLoad('dstate', DSTATE) || DSTATE;
+  SEALS = kvLoad('seals', SEALS) || SEALS;
+  if(!HIST.length) HIST = lsGet('hist', []);
+  attachAllRefs();
+  const b=document.getElementById('reqBtn'); if(b) b.textContent='＋ '+PLAN_YEAR+'년 신규 과정 신청';
+  const rb=document.getElementById('reopenBtn'); if(rb) rb.textContent='↻ '+PLAN_YEAR+'년 일괄 재개설';
+  setSaveState(storageOK?'ok':'offline');
+}
+
 </script>
 <div class="modal" id="instFixModal"><div class="ov show" style="z-index:100" onclick="closeInstFix()"></div>
   <div class="modal-card" style="max-width:900px" id="instFixWrap"></div>
