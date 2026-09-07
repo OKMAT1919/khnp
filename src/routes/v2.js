@@ -7,9 +7,10 @@
    - institutions/delta, competencies/delta : 변경된 행만 upsert / 삭제 (전체 replace 대체)
    - health       : 절전 방지·상태 확인용 (기존에 /api/health 가 있으면 그대로 두어도 됨)
 
-   장착: src/server.js 에 아래 두 줄 추가
-     const v2 = require('./routes/v2');
-     app.use('/api/v2', v2);
+   장착: src/server.js 라우트 등록부 마지막에 추가
+     app.use('/api/v2', require('./routes/v2'));
+
+   [rev2] 역량 중복 누적 수정(comp_level NULL 대응) · 기관 개명 시 tb_course.inst_nm 동기화 추가
    ===================================================================== */
 const express = require('express');
 const db = require('../db');
@@ -133,6 +134,13 @@ router.put('/institutions/delta', async (req, res) => {
       }
       up++;
     }
+    // 개명 시 과정의 표시 이름도 따라가게 (연결은 institution_id 로 유지 — sync.js replaceInsts 와 동일 규칙)
+    await client.query(
+      `UPDATE tb_course c SET inst_nm = i.inst_nm
+         FROM tb_institution i
+        WHERE c.institution_id = i.institution_id
+          AND c.inst_nm IS DISTINCT FROM i.inst_nm`);
+
     for (const x of remove) {
       // 물리 삭제 대신 폐지(use_yn=FALSE, valid_to) — 이력·복원 대응. 기존 bootstrap 이 use_yn=TRUE 만 내려주는지 확인 필요
       const r = await client.query(`UPDATE tb_institution SET use_yn=FALSE, valid_to=CURRENT_DATE, updated_at=now() WHERE inst_nm=$1${codeCol && x.code ? ` OR ${codeCol}=$2` : ''}`, codeCol && x.code ? [x.name || '', x.code] : [x.name || '']);
@@ -153,11 +161,22 @@ router.put('/competencies/delta', async (req, res) => {
     for (const c of upsert) {
       const name = String(c.name || '').trim(); if (!name || !c.jg || !c.sr) continue;
       const lv = (c.lv === '' || c.lv == null) ? null : parseInt(c.lv);
-      const r = await client.query(
-        `INSERT INTO tb_competency (jikgye, jikryeol, jikmu, comp_level, comp_nm, use_yn, valid_from) VALUES ($1,$2,$3,$4,$5,TRUE,CURRENT_DATE)
-         ON CONFLICT (jikgye, jikryeol, jikmu, comp_level, comp_nm) DO UPDATE SET use_yn=TRUE, valid_to=NULL, updated_at=now()`,
-        [c.jg, c.sr, c.jb || '', lv, name]);
-      up += r.rowCount;
+      // comp_level 이 NULL 이면 ON CONFLICT 가 작동하지 않으므로(PostgreSQL 은 NULL 을 서로 다른 값으로 취급)
+      // 존재 여부를 IS NOT DISTINCT FROM 으로 직접 확인해 중복 누적을 막습니다.
+      const ex = await client.query(
+        `SELECT comp_id FROM tb_competency
+          WHERE jikgye=$1 AND jikryeol=$2 AND jikmu=$3 AND comp_nm=$4
+            AND (comp_level IS NOT DISTINCT FROM $5) LIMIT 1`,
+        [c.jg, c.sr, c.jb || '', name, lv]);
+      if (ex.rows.length) {
+        await client.query(`UPDATE tb_competency SET use_yn=TRUE, valid_to=NULL, updated_at=now() WHERE comp_id=$1`, [ex.rows[0].comp_id]);
+      } else {
+        await client.query(
+          `INSERT INTO tb_competency (jikgye, jikryeol, jikmu, comp_level, comp_nm, use_yn, valid_from)
+           VALUES ($1,$2,$3,$4,$5,TRUE,CURRENT_DATE)`,
+          [c.jg, c.sr, c.jb || '', lv, name]);
+      }
+      up++;
     }
     for (const c of remove) {
       const lv = (c.lv === '' || c.lv == null) ? null : parseInt(c.lv);
