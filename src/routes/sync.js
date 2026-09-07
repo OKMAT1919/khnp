@@ -7,6 +7,17 @@
 //   - 나머지 3개 함수의 TRUNCATE → DELETE 로 변경 (DB 안전장치와 호환)
 //   - 빈 목록이 들어오면 저장을 거부하도록 방어 로직 추가
 //
+// [v2 대응 수정] 폐지(use_yn=FALSE) 이력 보존 + 저장 속도 개선
+//   ① DELETE 후 전량 재삽입 → "있으면 살리고 · 없으면 넣고 · 빠진 건 폐지" 방식으로 변경
+//      - 기존 방식은 v2 에서 폐지한 항목의 행 자체를 지워버려 되돌리기·감사 추적이 끊겼습니다.
+//      - 또한 DELETE 는 tb_competency 를 참조하는 데이터가 생길 경우 위험합니다.
+//   ② 행 단위 INSERT 반복(역량 1,300건 = 쿼리 1,300회) → JSON 1회 전송(집합 연산)으로 변경
+//      역량·직무체계 저장이 수 초 → 수백 ms 수준으로 단축됩니다.
+//   ③ comp_level 이 NULL 인 역량은 ON CONFLICT 가 걸리지 않으므로(PostgreSQL 은 NULL 을
+//      서로 다른 값으로 취급) IS NOT DISTINCT FROM 으로 직접 대조합니다.
+//   ④ valid_from/valid_to/updated_at 은 migration_v2.sql 적용 후에만 존재하므로
+//      기동 시 1회 확인해, 없으면 해당 컬럼 없이 동작합니다(마이그레이션 전에도 안전).
+//
 const router = require('express').Router();
 const db = require('../db');
 
@@ -80,70 +91,135 @@ function assertNotEmpty(label, size) {
   }
 }
 
-// ---- 컬렉션 통째 저장 (프론트 save* 대응) ----
-async function replaceTaxonomy(tree) {
-  const size = Object.keys(tree || {}).length;
-  assertNotEmpty('직무체계', size);
+// =====================================================================
+//  migration_v2.sql 적용 여부 확인 (valid_from/valid_to/updated_at 존재)
+//  - 적용 전이면 해당 컬럼을 쓰지 않고 동작하므로 배포 순서에 상관없이 안전합니다.
+// =====================================================================
+const V2COL = {};
+async function hasV2Cols(table) {
+  if (V2COL[table] !== undefined) return V2COL[table];
+  try {
+    const r = await db.query(
+      `SELECT 1 FROM information_schema.columns WHERE table_name=$1 AND column_name='valid_to' LIMIT 1`, [table]);
+    V2COL[table] = r.rows.length > 0;
+  } catch (e) { V2COL[table] = false; }
+  return V2COL[table];
+}
+// 살아난 행 / 폐지된 행에 붙일 SET 조각
+const setAlive = (v2) => v2 ? ', valid_to=NULL, updated_at=now()' : '';
+const setDead = (v2) => v2 ? ', valid_to=CURRENT_DATE, updated_at=now()' : '';
 
+// ---- 컬렉션 통째 저장 (프론트 save* 대응) ----
+//  공통 전략 : ① 들어온 항목은 살리고(use_yn=TRUE) ② 없던 항목은 새로 넣고
+//              ③ 목록에서 빠진 항목은 지우지 않고 폐지(use_yn=FALSE)
+//  → 폐지 이력이 남아 v2 「되돌리기」·감사 추적이 가능하고, 참조 무결성도 깨지지 않습니다.
+
+async function replaceTaxonomy(tree) {
+  assertNotEmpty('직무체계', Object.keys(tree || {}).length);
+  const items = [];
+  for (const jg of Object.keys(tree)) for (const sr of Object.keys(tree[jg])) {
+    const jbs = tree[jg][sr].length ? tree[jg][sr] : [''];
+    for (const jb of jbs) items.push({ jg, sr, jb: jb || '' });
+  }
+  assertNotEmpty('직무체계', items.length);
+  const v2 = await hasV2Cols('tb_job_taxonomy');
+  const P = [JSON.stringify(items)];
+  const SRC = `jsonb_to_recordset($1::jsonb) AS s(jg text, sr text, jb text)`;
+  const MATCH = `t.jikgye=s.jg AND t.jikryeol=s.sr AND t.jikmu=s.jb`;
   const c = await db.getClient();
   try {
     await c.query('BEGIN');
-    // TRUNCATE 대신 DELETE — 같은 트랜잭션에서 재삽입하므로 최종 건수는 유지됨
-    await c.query('DELETE FROM tb_job_taxonomy');
-    for (const jg of Object.keys(tree)) for (const sr of Object.keys(tree[jg])) {
-      const jbs = tree[jg][sr].length ? tree[jg][sr] : [''];
-      for (const jb of jbs) await c.query('INSERT INTO tb_job_taxonomy(jikgye,jikryeol,jikmu) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [jg, sr, jb]);
-    }
+    // ① 기존 행 재활성화 (폐지했다가 다시 등록한 경우 포함)
+    await c.query(`UPDATE tb_job_taxonomy t SET use_yn=TRUE${setAlive(v2)} FROM ${SRC} WHERE ${MATCH}`, P);
+    // ② 신규 행만 삽입
+    await c.query(
+      `INSERT INTO tb_job_taxonomy(jikgye,jikryeol,jikmu,use_yn)
+       SELECT DISTINCT s.jg,s.sr,s.jb,TRUE FROM ${SRC}
+        WHERE NOT EXISTS (SELECT 1 FROM tb_job_taxonomy t WHERE ${MATCH})`, P);
+    // ③ 목록에서 빠진 항목 → 폐지 (삭제하지 않음)
+    await c.query(
+      `UPDATE tb_job_taxonomy t SET use_yn=FALSE${setDead(v2)}
+        WHERE t.use_yn AND NOT EXISTS (SELECT 1 FROM ${SRC} WHERE ${MATCH})`, P);
     await c.query('COMMIT');
   } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
 
 async function replaceFramework(tree) {
-  const size = Object.keys(tree || {}).length;
-  assertNotEmpty('교육체계', size);
-
+  assertNotEmpty('교육체계', Object.keys(tree || {}).length);
+  const items = [];
+  for (const d of Object.keys(tree)) for (const j of Object.keys(tree[d])) {
+    const ss = tree[d][j].length ? tree[d][j] : [''];
+    for (const s3 of ss) items.push({ k1: d, k2: j, k3: s3 || '' });
+  }
+  assertNotEmpty('교육체계', items.length);
+  const v2 = await hasV2Cols('tb_framework');
+  const P = [JSON.stringify(items)];
+  const SRC = `jsonb_to_recordset($1::jsonb) AS s(k1 text, k2 text, k3 text)`;
+  const MATCH = `f.kb1=s.k1 AND f.kb2=s.k2 AND f.kb3=s.k3`;
   const c = await db.getClient();
   try {
     await c.query('BEGIN');
-    await c.query('DELETE FROM tb_framework');
-    for (const d of Object.keys(tree)) for (const j of Object.keys(tree[d])) {
-      const ss = tree[d][j].length ? tree[d][j] : [''];
-      for (const s of ss) await c.query('INSERT INTO tb_framework(kb1,kb2,kb3) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [d, j, s]);
-    }
+    await c.query(`UPDATE tb_framework f SET use_yn=TRUE${setAlive(v2)} FROM ${SRC} WHERE ${MATCH}`, P);
+    await c.query(
+      `INSERT INTO tb_framework(kb1,kb2,kb3,use_yn)
+       SELECT DISTINCT s.k1,s.k2,s.k3,TRUE FROM ${SRC}
+        WHERE NOT EXISTS (SELECT 1 FROM tb_framework f WHERE ${MATCH})`, P);
+    await c.query(
+      `UPDATE tb_framework f SET use_yn=FALSE${setDead(v2)}
+        WHERE f.use_yn AND NOT EXISTS (SELECT 1 FROM ${SRC} WHERE ${MATCH})`, P);
     await c.query('COMMIT');
   } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
 
 async function replaceComps(rows) {
   assertNotEmpty('역량', (rows || []).length);
-
+  const items = [];
+  for (const x of rows) {
+    const name = String(x.name || '').trim();
+    if (!name || !x.jg || !x.sr) continue;                       // 필수값 없는 행은 저장 대상에서 제외
+    const n = (x.lv === '' || x.lv == null) ? null : parseInt(x.lv, 10);
+    items.push({ jg: x.jg, sr: x.sr, jb: x.jb || '', lv: Number.isNaN(n) ? null : n, nm: name });
+  }
+  assertNotEmpty('역량', items.length);
+  const v2 = await hasV2Cols('tb_competency');
+  const P = [JSON.stringify(items)];
+  // comp_level 이 NULL 일 수 있어 = 대신 IS NOT DISTINCT FROM 으로 대조합니다.
+  const MATCH = `c.jikgye=s.jg AND c.jikryeol=s.sr AND c.jikmu=s.jb AND c.comp_nm=s.nm
+                 AND (c.comp_level IS NOT DISTINCT FROM s.lv)`;
+  const SRC = `jsonb_to_recordset($1::jsonb) AS s(jg text, sr text, jb text, lv int, nm text)`;
   const c = await db.getClient();
   try {
     await c.query('BEGIN');
-    await c.query('DELETE FROM tb_competency');
-    for (const x of rows) await c.query('INSERT INTO tb_competency(jikgye,jikryeol,jikmu,comp_level,comp_nm) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
-      [x.jg, x.sr, x.jb || '', x.lv === '' ? null : x.lv, x.name]);
+    await c.query(`UPDATE tb_competency c SET use_yn=TRUE${setAlive(v2)} FROM ${SRC} WHERE ${MATCH}`, P);
+    await c.query(
+      `INSERT INTO tb_competency(jikgye,jikryeol,jikmu,comp_level,comp_nm,use_yn)
+       SELECT DISTINCT s.jg,s.sr,s.jb,s.lv,s.nm,TRUE FROM ${SRC}
+        WHERE NOT EXISTS (SELECT 1 FROM tb_competency c WHERE ${MATCH})`, P);
+    await c.query(
+      `UPDATE tb_competency c SET use_yn=FALSE${setDead(v2)}
+        WHERE c.use_yn AND NOT EXISTS (SELECT 1 FROM ${SRC} WHERE ${MATCH})`, P);
     await c.query('COMMIT');
   } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
 }
 
 // =====================================================================
-//  교육기관 저장 — 이번 사고의 원인이었던 함수
+//  교육기관 저장 — 2026-08-19 사고의 원인이었던 함수
 //
 //  이전:  TRUNCATE tb_institution RESTART IDENTITY CASCADE
 //         → tb_course 가 institution_id 로 참조 중이므로 과정이 전부 삭제됨
 //         → 게다가 RESTART IDENTITY 로 기관 ID 가 1부터 재발급되어
 //            살아남은 과정이 있었어도 엉뚱한 기관에 연결되었을 것
 //
-//  변경:  ① 들어온 기관은 upsert (있으면 갱신, 없으면 추가) — ID 유지
-//         ② 목록에서 빠진 기관 중 과정이 참조 중인 것은 비활성(use_yn=false)
-//         ③ 아무도 참조하지 않는 것만 실제 삭제
+//  현재:  ① 들어온 기관은 upsert (있으면 갱신, 없으면 추가) — ID 유지
+//         ② 목록에서 빠진 기관은 폐지(use_yn=FALSE) — 삭제하지 않음
+//            (이전에는 참조가 없으면 물리 삭제했으나, v2 폐지 이력·되돌리기와 충돌하여 중단)
 // =====================================================================
 async function replaceInsts(rows) {
   assertNotEmpty('교육기관', (rows || []).length);
 
   const names = rows.map(x => String(x.name || '').trim()).filter(Boolean);
   assertNotEmpty('교육기관', names.length);
+  const v2 = await hasV2Cols('tb_institution');
 
   const c = await db.getClient();
   try {
@@ -157,7 +233,7 @@ async function replaceInsts(rows) {
       const cd = String(x.code || '').trim();
       if (cd) {
         const r = await c.query(
-          `UPDATE tb_institution SET inst_nm=$2,biz_no=$3,address=$4,tel=$5,homepage=$6,memo=$7,use_yn=TRUE
+          `UPDATE tb_institution SET inst_nm=$2,biz_no=$3,address=$4,tel=$5,homepage=$6,memo=$7,use_yn=TRUE${setAlive(v2)}
             WHERE inst_cd=$1 RETURNING institution_id`,
           [cd, nm, x.biz || '', x.addr || '', x.tel || '', x.home || '', x.memo || '']);
         if (r.rowCount) continue;   // 갱신 완료
@@ -182,21 +258,10 @@ async function replaceInsts(rows) {
         WHERE c.institution_id = i.institution_id
           AND c.inst_nm IS DISTINCT FROM i.inst_nm`);
 
-    // ② 목록에서 빠졌지만 과정이 참조 중인 기관 → 비활성 처리 (연결 보존)
+    // ② 목록에서 빠진 기관 → 폐지 (물리 삭제하지 않음: 과정 연결·되돌리기 보존)
     await c.query(
-      `UPDATE tb_institution i SET use_yn = FALSE
-        WHERE i.inst_nm <> ALL($1::text[])
-          AND i.use_yn
-          AND EXISTS (SELECT 1 FROM tb_course c
-                       WHERE c.institution_id = i.institution_id OR c.inst_nm = i.inst_nm)`,
-      [names]);
-
-    // ③ 목록에서 빠졌고 아무도 참조하지 않는 기관 → 실제 삭제
-    await c.query(
-      `DELETE FROM tb_institution i
-        WHERE i.inst_nm <> ALL($1::text[])
-          AND NOT EXISTS (SELECT 1 FROM tb_course c
-                           WHERE c.institution_id = i.institution_id OR c.inst_nm = i.inst_nm)`,
+      `UPDATE tb_institution i SET use_yn = FALSE${setDead(v2)}
+        WHERE i.use_yn AND i.inst_nm <> ALL($1::text[])`,
       [names]);
 
     await c.query('COMMIT');
