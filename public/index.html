@@ -2126,6 +2126,34 @@ function renameInCourses(level, oldV, newV, scopeJG, scopeSR){
     else if(level==='jb' && x.jg===scopeJG && x.sr===scopeSR && x.jb===oldV) x.jb=newV;
   });
 }
+/* 역량명 개명 — 과정 배열(cp)·매핑(map[][4])·OVERRIDES·역량 레지스트리(COMPS)를
+   모두 이름 기준으로 연쇄 갱신. (교육기관 개명과 동일 구조: 연결을 잃지 않고 카운트 유지)
+   서버 반영은 별도로 PUT /api/competencies 가 tb_course_comp 까지 갱신합니다.
+   반환: 갱신된 과정 수 */
+function renameCompInCourses(oldName, newName){
+  if(!oldName || oldName===newName) return 0;
+  let n=0;
+  CAT.forEach(c=>{
+    let hit=false;
+    if(Array.isArray(c.cp) && c.cp.includes(oldName)){ c.cp=[...new Set(c.cp.map(x=>x===oldName?newName:x))]; hit=true; }
+    (c.map||[]).forEach(m=>{ if(Array.isArray(m[4]) && m[4].includes(oldName)){ m[4]=[...new Set(m[4].map(x=>x===oldName?newName:x))]; hit=true; } });
+    if(hit){
+      n++;
+      const inAdded=OVERRIDES.added.find(x=>x.id===c.id);
+      if(inAdded){ inAdded.cp=c.cp; inAdded.map=c.map; }
+      else { OVERRIDES.edits[c.id]=OVERRIDES.edits[c.id]||{}; OVERRIDES.edits[c.id].cp=c.cp; OVERRIDES.edits[c.id].map=c.map; }
+    }
+  });
+  // 역량 레지스트리 전체에서 동일 이름 갱신 (같은 역량이 여러 직무에 매핑돼 있어도 일괄)
+  COMPS.forEach(x=>{ if(x.name===oldName) x.name=newName; });
+  return n;
+}
+/* 역량명 개명 서버 반영 (실패해도 로컬은 이미 반영됨) */
+async function pushCompRename(oldName, newName){
+  if(!storageOK || !oldName || oldName===newName) return;
+  try{ await api('/api/competencies', {method:'PUT', body:JSON.stringify({oldName, newName})}); }
+  catch(e){ console.error(e); toast('역량 개명 서버 반영 실패 — 새로고침 후 확인해 주세요'); }
+}
 async function editJG(j){
   const v = prompt('직계명을 수정하세요', j); if(v===null) return;
   const nv = v.trim(); if(!nv||nv===j) return;
@@ -2369,11 +2397,26 @@ async function saveInstForm(){
   if(!name){ toast('교육기관명을 입력하세요'); return; }
   const dup = INSTS.findIndex(x=>x.name===name);
   if(dup>=0 && dup!==editingInst){ toast('이미 등록된 교육기관명입니다'); return; }
-  const rec = { name, biz:document.getElementById('in_biz').value.trim(), addr:document.getElementById('in_addr').value.trim(),
+  const fields = { name, biz:document.getElementById('in_biz').value.trim(), addr:document.getElementById('in_addr').value.trim(),
     tel:document.getElementById('in_tel').value.trim(), home:document.getElementById('in_home').value.trim(), memo:document.getElementById('in_memo').value.trim() };
-  if(editingInst!==null){ INSTS[editingInst]=rec; log('교육기관 수정', name); toast('✓ 교육기관 정보가 수정되었습니다'); }
-  else { INSTS.unshift(rec); log('교육기관 등록', name); toast('✓ 교육기관이 등록되었습니다 — 과정 등록 양식에 반영됩니다'); }
-  await saveInsts(); closeInstForm(); renderInst();
+  if(editingInst!==null){
+    const prev = INSTS[editingInst] || {};
+    const oldName = prev.name;
+    // 기존 레코드를 유지한 채 편집 필드만 덮어써서 code(기관ID, 예: IN0124)를 절대 잃지 않습니다.
+    // code 가 살아있어야 서버가 UPDATE(개명)로 처리하여 ID 를 유지하고 연계 과정이 함께 갱신됩니다.
+    const rec = { ...prev, ...fields };
+    INSTS[editingInst] = rec;
+    // 개명이면 이 기관을 참조하는 과정의 표시 이름을 즉시 반영(연결은 code 로 유지).
+    // → 화면 새로고침 전에도 연계 과정 수·목록이 바로 맞습니다.
+    let cascaded = 0;
+    if(rec.code && oldName && oldName !== name){
+      CAT.forEach(c=>{ if(c.icd===rec.code || (!c.icd && c.i===oldName)){ c.i=name; c.icd=rec.code; cascaded++; } });
+    }
+    log('교육기관 수정', name);
+    toast('✓ 교육기관 정보가 수정되었습니다'+(cascaded?` (연계 과정 ${cascaded}건 자동 반영)`:''));
+  }
+  else { INSTS.unshift(fields); log('교육기관 등록', name); toast('✓ 교육기관이 등록되었습니다 — 과정 등록 양식에 반영됩니다'); }
+  await saveInsts(); closeInstForm(); renderInst(); render();
 }
 async function delInst(ri){
   const x = INSTS[ri]; if(!x) return;
@@ -2560,6 +2603,8 @@ function cpCurrentFilterIdx(){
 }
 function renderCompGrid(){
   if(!compGridOn) return;
+  // 개명 감지용 스냅샷 — 저장 시 COMPS[i].name 과 비교해 바뀐 이름을 과정에 연쇄 반영
+  window._cpNameSnap = COMPS.map(c=>c.name||'');
   cpFilteredIdx=cpCurrentFilterIdx();
   window._cpIdxList=cpFilteredIdx;
   const jgs=Object.keys(TAX).sort((a,b)=>a.localeCompare(b,'ko'));
@@ -2622,13 +2667,25 @@ function compGridDel(i){
   COMPS.splice(i,1); renderCompGrid();
 }
 async function saveCompGrid(){
+  // ① 인라인으로 이름이 바뀐 행 감지 → 과정·매핑까지 이름 연쇄 (모달 수정과 동일 동작)
+  const snap = window._cpNameSnap || [];
+  const pairs = new Map();  // oldName → newName (같은 old 는 처음 것만)
+  COMPS.forEach((c,i)=>{
+    const oldN=(snap[i]||'').trim(), newN=((c&&c.name)||'').trim();
+    if(oldN && newN && oldN!==newN && !pairs.has(oldN)) pairs.set(oldN, newN);
+  });
+  let cascaded=0;
+  for(const [oldN,newN] of pairs){ cascaded += renameCompInCourses(oldN, newN); await pushCompRename(oldN, newN); }
+
   const cleaned=COMPS.filter(c=>(c.name||'').trim() && c.jg && c.sr);
   const dropped=COMPS.length-cleaned.length;
   COMPS=cleaned.map(c=>({...c, name:c.name.trim(), lv:c.lv===''?'':parseInt(c.lv)}));
   await saveComps();
   log('역량 일괄 저장', COMPS.length+'개');
-  renderCompGrid(); renderComp();
-  toast('✓ 역량 '+COMPS.length+'개가 저장되었습니다'+(dropped>0?` (직계·직렬·역량명 미입력 ${dropped}행 제외)`:''));
+  renderCompGrid(); renderComp(); render();
+  toast('✓ 역량 '+COMPS.length+'개가 저장되었습니다'
+    +(pairs.size?` · 개명 ${pairs.size}건, 연계 과정 ${cascaded}건 반영`:'')
+    +(dropped>0?` (직계·직렬·역량명 미입력 ${dropped}행 제외)`:''));
 }
 
 function cpJGchange(){
@@ -2733,9 +2790,21 @@ async function saveCompForm(){
   const rec={jg,sr,jb,lv:parseInt(lv),name};
   const dup=COMPS.findIndex(c=>c.jg===jg&&c.sr===sr&&c.jb===jb&&String(c.lv)===String(rec.lv)&&c.name===name);
   if(dup>=0 && dup!==editingComp){ toast('이미 등록된 역량입니다'); return; }
-  if(editingComp!==null){ COMPS[editingComp]=rec; log('역량 수정', name); toast('✓ 역량이 수정되었습니다'); }
+  if(editingComp!==null){
+    const oldName = (COMPS[editingComp]||{}).name;
+    let cascaded=0;
+    if(oldName && oldName!==name){
+      // 이름이 바뀌면 이 역량을 참조하는 모든 과정·매핑을 함께 개명(연결 유지·카운트 보존)
+      cascaded = renameCompInCourses(oldName, name);
+      await pushCompRename(oldName, name);
+    }
+    // 편집 대상 행의 스코프/레벨/이름 반영 (개명 연쇄와 별개로 해당 행 자체를 갱신)
+    COMPS[editingComp]=rec;
+    log('역량 수정', name);
+    toast('✓ 역량이 수정되었습니다'+(cascaded?` (연계 과정 ${cascaded}건 자동 반영)`:''));
+  }
   else { COMPS.push(rec); log('역량 등록', jg+'>'+sr+'>'+jb+' Lv'+rec.lv+' : '+name); toast('✓ 역량이 등록되었습니다 — 과정 등록에서 추천됩니다'); }
-  await saveComps(); closeCompForm(); renderComp();
+  await saveComps(); closeCompForm(); renderComp(); render();
 }
 async function delComp(gi){
   const c=COMPS[gi]; if(!c) return;
